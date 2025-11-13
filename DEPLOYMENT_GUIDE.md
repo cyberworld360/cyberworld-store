@@ -4,6 +4,7 @@
 ---
 
 ## Overview
+
 To point your domain `cyberworldstore.shop` to your Flask application, you need to:
 1. Deploy your Flask app to a server
 2. Configure DNS settings
