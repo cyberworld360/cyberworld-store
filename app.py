@@ -692,9 +692,11 @@ def initdb_command():
         # Inspect product table columns (works for SQLite)
         has_card_size = False
         try:
-            res = db.engine.execute("PRAGMA table_info(product)")
-            cols = [r[1] for r in res.fetchall()]
-            has_card_size = 'card_size' in cols
+            # Use a connection and exec_driver_sql for compatibility with SQLAlchemy 1.4+
+            with db.engine.connect() as conn:
+                res = conn.exec_driver_sql("PRAGMA table_info(product)")
+                cols = [r[1] for r in res.fetchall()]
+                has_card_size = 'card_size' in cols
         except Exception:
             has_card_size = False
 

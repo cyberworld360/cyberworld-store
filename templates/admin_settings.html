@@ -258,7 +258,7 @@
                     <label for="primary_font">Primary Font (Body Text)</label>
                     <input type="text" id="primary_font" name="primary_font" value="{{ settings.primary_font }}" placeholder="Arial, sans-serif" />
                     <small>Examples: Arial, Helvetica, Verdana, Georgia, 'Times New Roman'</small>
-                    <div class="font-preview" style="font-family: {{ settings.primary_font }}">
+                    <div class="font-preview" data-font="{{ settings.primary_font }}">
                         Sample text with {{ settings.primary_font }}
                     </div>
                 </div>
@@ -267,7 +267,7 @@
                     <label for="secondary_font">Secondary Font (Headings)</label>
                     <input type="text" id="secondary_font" name="secondary_font" value="{{ settings.secondary_font }}" placeholder="Verdana, sans-serif" />
                     <small>Examples: Arial, Helvetica, Verdana, Georgia, 'Courier New'</small>
-                    <div class="font-preview" style="font-family: {{ settings.secondary_font }}">
+                    <div class="font-preview" data-font="{{ settings.secondary_font }}">
                         <strong>Sample Heading with {{ settings.secondary_font }}</strong>
                     </div>
                 </div>
@@ -281,8 +281,8 @@
                     <label for="primary_color">Primary Color (Buttons, Links)</label>
                     <div style="display: flex; align-items: center; gap: 10px;">
                         <input type="color" id="primary_color" name="primary_color" value="{{ settings.primary_color }}" />
-                        <span class="color-preview" style="background: {{ settings.primary_color }};"></span>
-                        <input type="text" value="{{ settings.primary_color }}" readonly style="flex: 1; max-width: 150px;" />
+                        <span class="color-preview" data-color="{{ settings.primary_color }}"></span>
+                        <input type="text" class="color-hex" value="{{ settings.primary_color }}" readonly style="flex: 1; max-width: 150px;" />
                     </div>
                 </div>
 
@@ -290,8 +290,8 @@
                     <label for="secondary_color">Secondary Color (Accents)</label>
                     <div style="display: flex; align-items: center; gap: 10px;">
                         <input type="color" id="secondary_color" name="secondary_color" value="{{ settings.secondary_color }}" />
-                        <span class="color-preview" style="background: {{ settings.secondary_color }};"></span>
-                        <input type="text" value="{{ settings.secondary_color }}" readonly style="flex: 1; max-width: 150px;" />
+                        <span class="color-preview" data-color="{{ settings.secondary_color }}"></span>
+                        <input type="text" class="color-hex" value="{{ settings.secondary_color }}" readonly style="flex: 1; max-width: 150px;" />
                     </div>
                 </div>
             </div>
@@ -350,6 +350,53 @@
             if (this.files.length > 0) {
                 label.textContent = '✓ ' + this.files[0].name + ' selected';
             }
+        });
+    });
+
+    // Initialize and sync color previews and hex inputs (avoid inline CSS with template braces)
+    document.querySelectorAll('.color-preview').forEach(preview => {
+        const color = preview.getAttribute('data-color') || '#dddddd';
+        preview.style.background = color;
+    });
+
+    document.querySelectorAll('input[type="color"]').forEach(colorInput => {
+        const wrapper = colorInput.parentElement;
+        const preview = wrapper.querySelector('.color-preview');
+        const hexInput = wrapper.querySelector('input.color-hex');
+
+        // Initialize values
+        const initial = colorInput.value || (preview ? preview.getAttribute('data-color') : '') || '#dddddd';
+        if (preview) preview.style.background = initial;
+        if (hexInput) hexInput.value = initial;
+
+        // Update on user change
+        colorInput.addEventListener('input', () => {
+            const val = colorInput.value;
+            if (preview) preview.style.background = val;
+            if (hexInput) hexInput.value = val;
+        });
+    });
+
+    // Initialize font-preview elements using data-font to avoid template braces in inline styles
+    document.querySelectorAll('.font-preview').forEach(fp => {
+        const font = fp.getAttribute('data-font') || '';
+        if (font) {
+            fp.style.fontFamily = font;
+        }
+    });
+
+    // Keep previews in sync when inputs change
+    ['primary_font','secondary_font'].forEach(id => {
+        const input = document.getElementById(id);
+        if (!input) return;
+        input.addEventListener('input', () => {
+            // find the nearest .font-preview in the same form-group
+            const group = input.closest('.form-group');
+            if (!group) return;
+            const preview = group.querySelector('.font-preview');
+            if (!preview) return;
+            preview.style.fontFamily = input.value;
+            preview.setAttribute('data-font', input.value);
         });
     });
 </script>
