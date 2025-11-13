@@ -104,6 +104,7 @@ class Product(db.Model):
     old_price_ghc = db.Column(db.Numeric(10, 2))
     image = db.Column(db.String(300))
     featured = db.Column(db.Boolean, default=False)
+    card_size = db.Column(db.String(20), default='medium')
 
     def to_dict(self):
         return {
@@ -223,7 +224,7 @@ class Coupon(db.Model):
     expiry_date = db.Column(db.DateTime, default=None)  # None = no expiry
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=lambda: __import__('datetime').datetime.utcnow())
-    card_size = db.Column(db.String(20), default='medium')  # small, medium, large
+    # note: `card_size` belongs to Product (card display size), not Coupon
 
     def is_valid(self):
         """Check if coupon is still valid"""
@@ -470,6 +471,11 @@ def send_html_email(to_address: str, subject: str, html_body: str, plain_text = 
     placeholder_passwords = ("", "your-app-password-here", "changeme", "password", "your-password")
     if (not MAIL_SERVER) or (not MAIL_USERNAME) or (not MAIL_PASSWORD) or (MAIL_PASSWORD.lower() in placeholder_passwords) or MAIL_PASSWORD.lower().startswith("your"):
         print(f"[email disabled] To: {to_address} Subject: {subject}\n{plain_text}")
+        try:
+            app.logger.info("[email disabled] Would send to: %s (MAIL_SERVER=%s, MAIL_USERNAME=%s, has_password=%s)", 
+                          to_address, bool(MAIL_SERVER), bool(MAIL_USERNAME), bool(MAIL_PASSWORD))
+        except Exception:
+            pass
         return True
 
     # Build multipart HTML email message
@@ -679,22 +685,65 @@ def _retry_failed_emails_loop(interval: int = 60, max_attempts: int = 5):
 # Initialize DB helper (for CLI)
 @app.cli.command("initdb")
 def initdb_command():
+    # Create tables if they don't exist
     db.create_all()
+    # If the database was created before `card_size` existed on Product, try to add the column.
+    try:
+        # Inspect product table columns (works for SQLite)
+        has_card_size = False
+        try:
+            res = db.engine.execute("PRAGMA table_info(product)")
+            cols = [r[1] for r in res.fetchall()]
+            has_card_size = 'card_size' in cols
+        except Exception:
+            has_card_size = False
+
+        if not has_card_size:
+            try:
+                with db.engine.connect() as conn:
+                    conn.execute("ALTER TABLE product ADD COLUMN card_size VARCHAR(20) DEFAULT 'medium'")
+                print('Added missing `card_size` column to product table')
+            except Exception:
+                print('Could not add card_size column automatically; please run migrations')
+    except Exception:
+        # If inspection fails, continue and let subsequent operations handle errors
+        pass
     # create default admin
     if not AdminUser.query.filter_by(username="admin").first():
         admin = AdminUser()
         admin.username = "admin"
         admin.set_password(os.environ.get("ADMIN_PASSWORD", "GITG360"))
         db.session.add(admin)
-    # add sample products if none
-    if Product.query.count() == 0:
-        sample = [
-            {"title":"Sample Soundbar", "short":"High quality sound bar", "price_ghc":1190.45, "old_price_ghc":1434.00, "image":"/static/images/placeholder.png", "featured":True},
-            {"title":"Wireless Modem 4G/5G", "short":"High speed wireless modem", "price_ghc":700.00, "old_price_ghc":780.00, "image":"/static/images/placeholder.png", "featured":True},
-        ]
-        for s in sample:
-            p = Product(title=s["title"], short=s["short"], price_ghc=s["price_ghc"], old_price_ghc=s["old_price_ghc"], image=s["image"], featured=s["featured"])
-            db.session.add(p)
+    # add sample products if none — use raw SQL count to avoid ORM column mapping errors on older schemas
+    try:
+        cnt = 0
+        try:
+            res = db.session.execute("SELECT COUNT(*) FROM product")
+            cnt = int(res.scalar() or 0)
+        except Exception:
+            cnt = 0
+
+        if cnt == 0:
+            sample = [
+                {"title":"Sample Soundbar", "short":"High quality sound bar", "price_ghc":1190.45, "old_price_ghc":1434.00, "image":"/static/images/placeholder.png", "featured":True},
+                {"title":"Wireless Modem 4G/5G", "short":"High speed wireless modem", "price_ghc":700.00, "old_price_ghc":780.00, "image":"/static/images/placeholder.png", "featured":True},
+            ]
+            for s in sample:
+                try:
+                    p = Product(title=s["title"], short=s["short"], price_ghc=s["price_ghc"], old_price_ghc=s["old_price_ghc"], image=s["image"], featured=s["featured"])
+                    db.session.add(p)
+                except Exception:
+                    # If the ORM insert fails because the DB schema lacks `card_size`, fall back to raw INSERT excluding that column
+                    try:
+                        db.session.execute(
+                            "INSERT INTO product (title, short, price_ghc, old_price_ghc, image, featured) VALUES (:title, :short, :price_ghc, :old_price_ghc, :image, :featured)",
+                            dict(title=s["title"], short=s["short"], price_ghc=s["price_ghc"], old_price_ghc=s["old_price_ghc"], image=s["image"], featured=1 if s["featured"] else 0)
+                        )
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+
     db.session.commit()
     print("DB initialized and sample data added (if applicable).")
 
@@ -995,7 +1044,7 @@ def wallet_payment():
                     if it.get('product_id'):
                         p = Product.query.get(it.get('product_id'))
                         if p:
-                            item_dict['image_path'] = p.image_path if p.image_path else ''
+                            item_dict['image_path'] = p.image if p.image else ''
                     items_with_images.append(item_dict)
                 
                 # Build HTML email
@@ -1049,7 +1098,7 @@ def wallet_payment():
                 if it.get('product_id'):
                     p = Product.query.get(it.get('product_id'))
                     if p:
-                        item_dict['image_path'] = p.image_path if p.image_path else ''
+                        item_dict['image_path'] = p.image if p.image else ''
                 items_with_images.append(item_dict)
             
             html_admin = '<html><body style="font-family:Arial,sans-serif; line-height:1.6; color:#333;">'
@@ -1135,7 +1184,7 @@ def paystack_callback():
                         if it.get('product_id'):
                             p = Product.query.get(it.get('product_id'))
                             if p:
-                                item_dict['image_path'] = p.image_path if p.image_path else ''
+                                item_dict['image_path'] = p.image if p.image else ''
                         items_with_images.append(item_dict)
                     
                     # Build HTML email
@@ -1188,7 +1237,7 @@ def paystack_callback():
                     if it.get('product_id'):
                         p = Product.query.get(it.get('product_id'))
                         if p:
-                            item_dict['image_path'] = p.image_path if p.image_path else ''
+                            item_dict['image_path'] = p.image if p.image else ''
                     items_with_images.append(item_dict)
                 
                 html_admin = '<html><body style="font-family:Arial,sans-serif; line-height:1.6; color:#333;">'
@@ -1346,14 +1395,34 @@ def checkout_success():
 def admin_test_email():
     """Send a test email to the admin address to verify delivery/SMTP setup."""
     subject = "[Test] Admin notification from CyberWorld"
-    body = (
-        "This is a test email to verify admin notifications are working.\n\n"
-        "If you received this, admin emails are delivering correctly.\n"
+    html_body = """
+    <html><body style="font-family:Arial,sans-serif; line-height:1.6; color:#333;">
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding:20px; text-align:center; color:white; border-radius:4px;">
+            <h2 style="margin:0;">✅ Test Email</h2>
+        </div>
+        <div style="max-width:600px; margin:20px auto; padding:20px;">
+            <p>This is a test email to verify admin notifications are working.</p>
+            <p><strong>If you received this, email delivery is configured correctly!</strong></p>
+            <div style="background-color:#e8f5e9; padding:15px; border-left:4px solid #4caf50; margin:20px 0; border-radius:4px;">
+                <p style="margin:0;"><strong>✓ Configuration Status:</strong><br>
+                MAIL_SERVER: {}<br>
+                MAIL_USERNAME: {}<br>
+                ADMIN_EMAIL: {}
+                </p>
+            </div>
+        </div>
+    </body></html>
+    """.format(
+        "✓ Configured" if MAIL_SERVER else "✗ Not configured",
+        "✓ Configured" if MAIL_USERNAME else "✗ Not configured",
+        ADMIN_EMAIL
     )
+    
+    body = "This is a test email to verify admin notifications are working.\n\nIf you received this, admin emails are delivering correctly.\n"
     try:
-        ok = send_email(ADMIN_EMAIL, subject, body)
+        ok = send_html_email_async(ADMIN_EMAIL, subject, html_body, body)
         if ok:
-            return jsonify({"status": "sent", "to": ADMIN_EMAIL}), 200
+            return jsonify({"status": "sent", "to": ADMIN_EMAIL, "message": "Test email queued for sending"}), 200
         else:
             return jsonify({"status": "failed", "to": ADMIN_EMAIL}), 500
     except Exception as e:
@@ -1745,7 +1814,7 @@ def admin_order_update_status(oid):
                     if oi.product_id:
                         p = Product.query.get(oi.product_id)
                         if p:
-                            item_dict['image_path'] = p.image_path if p.image_path else ''
+                            item_dict['image_path'] = p.image if p.image else ''
                     items_with_images.append(item_dict)
                 
                 # Build HTML based on status
