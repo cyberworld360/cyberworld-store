@@ -1,0 +1,114 @@
+{% extends 'base.html' %}
+{% block content %}
+<style>
+  /* Homepage background styling */
+  body {
+    background-image: url('{{ settings.bg_image }}');
+    background-attachment: fixed;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+  }
+  
+  .products .card {
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(5px);
+  }
+  
+  .featured .card {
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(5px);
+  }
+</style>
+
+<style>
+  /* Card size variants */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 20px;
+  }
+  
+  .card.card-small {
+    grid-column: span 1;
+    min-height: 280px;
+  }
+  
+  .card.card-small img {
+    height: 120px;
+    object-fit: cover;
+  }
+  
+  .card.card-medium {
+    grid-column: span 1;
+    min-height: 350px;
+  }
+  
+  .card.card-medium img {
+    height: 180px;
+    object-fit: cover;
+  }
+  
+  .card.card-large {
+    grid-column: span 2;
+    min-height: 400px;
+  }
+  
+  .card.card-large img {
+    height: 250px;
+    object-fit: cover;
+  }
+  
+  @media (max-width: 768px) {
+    .card.card-large {
+      grid-column: span 1;
+    }
+  }
+</style>
+
+<section class="ads-slider">
+  <div class="slide active"><img src="{{ settings.banner1_image }}" alt="Ad 1" /></div>
+  <div class="slide"><img src="{{ settings.banner2_image }}" alt="Ad 2" /></div>
+</section>
+
+<section class="hero">
+  <h2>Shop best sellers</h2>
+  <p>Discover top-rated products and great deals</p>
+</section>
+
+<section class="featured">
+  <h3>Featured Products</h3>
+  <div class="featured-controls">
+    <button class="featured-prev">◀</button>
+    <button class="featured-next">▶</button>
+  </div>
+  <div class="featured-track">
+    {% for p in featured %}
+    <div class="card">
+      <img src="{{ p.image or settings.bg_image }}" alt="{{ p.title }}" />
+      <h4>{{ p.title }}</h4>
+      <p class="price">{{ p.price_ghc|money }} {% if p.old_price_ghc %}<span class="old">{{ p.old_price_ghc|money }}</span>{% endif %}</p>
+      <a href="/product/{{ p.id }}" class="btn-outline">View</a>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+<section id="products" class="products">
+  <div class="grid">
+    {% for p in products %}
+    <div class="card card-{{ p.card_size or 'medium' }}">
+      <img src="{{ p.image or settings.bg_image }}" alt="{{ p.title }}" />
+      <h4>{{ p.title }}</h4>
+      <p>{{ p.short }}</p>
+      <p class="price">{{ p.price_ghc|money }} {% if p.old_price_ghc %}<span class="old">{{ p.old_price_ghc|money }}</span>{% endif %}</p>
+      <form action="/cart/add/{{ p.id }}" method="post">
+        <input type="number" name="qty" value="1" min="1" />
+        <button class="btn" type="submit">Add to cart</button>
+      </form>
+      <a href="/product/{{ p.id }}" class="btn-outline">View</a>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

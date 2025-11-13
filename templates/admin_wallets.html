@@ -1,0 +1,129 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="admin-container">
+  <h2>💳 Manage User Wallets</h2>
+  
+  {% if users %}
+    <div class="wallets-list">
+      {% for user in users %}
+      <div class="wallet-card">
+        <div class="wallet-header">
+          <h3>{{ user.email }}</h3>
+          <span class="balance">Balance: <strong>GH₵{{ user.wallet.balance if user.wallet else '0.00' }}</strong></span>
+        </div>
+        
+        <div class="wallet-actions">
+          <!-- Credit Wallet -->
+          <form action="/admin/wallet/credit/{{ user.id }}" method="post" class="inline-form">
+            <input type="number" name="amount" step="0.01" min="0" placeholder="Amount to credit" required />
+            <button type="submit" class="btn btn-success">Credit</button>
+          </form>
+          
+          <!-- Debit Wallet -->
+          <form action="/admin/wallet/debit/{{ user.id }}" method="post" class="inline-form">
+            <input type="number" name="amount" step="0.01" min="0" placeholder="Amount to debit" required />
+            <button type="submit" class="btn btn-warning">Debit</button>
+          </form>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p style="text-align: center; padding: 2rem; color: #666;">No users found.</p>
+  {% endif %}
+</div>
+
+<style>
+.wallets-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.wallet-card {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+}
+
+.wallet-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 1rem;
+}
+
+.wallet-header h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #333;
+}
+
+.balance {
+  font-size: 14px;
+  color: #666;
+}
+
+.balance strong {
+  color: #28a745;
+  font-size: 18px;
+}
+
+.wallet-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.inline-form {
+  display: flex;
+  gap: 0.5rem;
+  flex: 1;
+  min-width: 250px;
+}
+
+.inline-form input {
+  flex: 1;
+  padding: 0.5rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.inline-form button {
+  padding: 0.5rem 1rem;
+  font-size: 13px;
+}
+
+.btn-success {
+  background-color: #28a745;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 0.5rem 1rem;
+}
+
+.btn-success:hover {
+  background-color: #218838;
+}
+
+.btn-warning {
+  background-color: #ffc107;
+  color: #333;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 0.5rem 1rem;
+}
+
+.btn-warning:hover {
+  background-color: #e0a800;
+}
+</style>
+{% endblock %}

@@ -1,0 +1,242 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="admin-form-container">
+  <h2>{% if product %}Edit Product{% else %}Add New Product{% endif %}</h2>
+  
+  <form method="post" enctype="multipart/form-data" class="admin-form">
+    <div class="form-group">
+      <label for="title">Product Title *</label>
+      <input 
+        type="text" 
+        id="title"
+        name="title" 
+        value="{{ product.title if product else '' }}" 
+        required 
+        placeholder="Enter product name"
+        maxlength="255"
+      />
+      <small>Required field. Max 255 characters.</small>
+    </div>
+
+    <div class="form-group">
+      <label for="short">Product Description</label>
+      <textarea 
+        id="short"
+        name="short"
+        placeholder="Enter product description"
+        rows="4"
+        maxlength="500"
+      >{{ product.short if product else '' }}</textarea>
+      <small>Optional. Max 500 characters.</small>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label for="price">Price (GH₵) *</label>
+        <input 
+          type="number" 
+          id="price"
+          name="price" 
+          value="{{ product.price_ghc if product else '' }}" 
+          required 
+          step="0.01"
+          min="0"
+          placeholder="0.00"
+        />
+        <small>Required field. Selling price.</small>
+      </div>
+
+      <div class="form-group">
+        <label for="old_price">Old Price (GH₵)</label>
+        <input 
+          type="number" 
+          id="old_price"
+          name="old_price" 
+          value="{{ product.old_price_ghc if product else '' }}" 
+          step="0.01"
+          min="0"
+          placeholder="0.00"
+        />
+        <small>Optional. Used to show discount.</small>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="image_file">Upload Product Image</label>
+      <input 
+        type="file" 
+        id="image_file"
+        name="image_file" 
+        accept=".png,.jpg,.jpeg,.gif"
+      />
+      <small>Allowed formats: PNG, JPG, JPEG, GIF. Max 5MB.</small>
+      {% if product and product.image %}
+        <div class="current-image">
+          <p>Current image:</p>
+          <img src="{{ product.image }}" alt="{{ product.title }}" style="max-width: 150px; max-height: 150px;">
+        </div>
+      {% endif %}
+    </div>
+
+    <div class="form-group checkbox">
+      <input 
+        type="checkbox" 
+        id="featured"
+        name="featured" 
+        {% if product and product.featured %}checked{% endif %}
+      />
+      <label for="featured">Featured Product (show on homepage)</label>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit">
+        {% if product %}Update Product{% else %}Create Product{% endif %}
+      </button>
+      <a class="btn btn-secondary" href="/admin">Cancel</a>
+    </div>
+  </form>
+</div>
+
+    <div class="form-group">
+      <label for="card_size">Product Card Size</label>
+      <select 
+        id="card_size"
+        name="card_size"
+        class="form-control"
+      >
+        <option value="small" {% if product and product.card_size == 'small' %}selected{% endif %}>Small (Compact)</option>
+        <option value="medium" {% if product and (not product or product.card_size == 'medium') %}selected{% endif %}>Medium (Standard)</option>
+        <option value="large" {% if product and product.card_size == 'large' %}selected{% endif %}>Large (Featured)</option>
+      </select>
+      <small>Control how the product card displays on the shop. Large cards are good for featured items.</small>
+    </div>
+
+<style>
+.admin-form-container {
+  max-width: 600px;
+  margin: 30px auto;
+  padding: 20px;
+  background: #f9f9f9;
+  border-radius: 8px;
+}
+
+.admin-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-group label {
+  font-weight: bold;
+  color: #333;
+}
+
+.form-group input[type="text"],
+.form-group input[type="number"],
+.form-group input[type="file"],
+.form-group textarea {
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.form-group input[type="text"]:focus,
+.form-group input[type="number"]:focus,
+.form-group input[type="file"]:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 5px rgba(0, 123, 255, 0.3);
+}
+
+.form-group small {
+  color: #666;
+  font-size: 12px;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+@media (max-width: 600px) {
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.form-group.checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+
+.form-group.checkbox input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+}
+
+.form-group.checkbox label {
+  margin: 0;
+}
+
+.current-image {
+  margin-top: 10px;
+  padding: 10px;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.current-image p {
+  margin: 0 0 10px 0;
+  font-size: 12px;
+  color: #666;
+}
+
+.form-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: bold;
+  text-decoration: none;
+  display: inline-block;
+  transition: all 0.3s ease;
+}
+
+.btn-primary {
+  background-color: #007bff;
+  color: white;
+}
+
+.btn-primary:hover {
+  background-color: #0056b3;
+}
+
+.btn-secondary {
+  background-color: #6c757d;
+  color: white;
+}
+
+.btn-secondary:hover {
+  background-color: #545b62;
+}
+</style>
+{% endblock %}

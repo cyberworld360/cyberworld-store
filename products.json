@@ -1,0 +1,20 @@
+[
+  {
+    "id": 1,
+    "title": "Sample Soundbar",
+    "short": "High quality sound bar",
+    "price_ghc": 1190.45,
+    "old_price_ghc": 1434.0,
+    "image": "/static/images/placeholder.png",
+    "featured": true
+  },
+  {
+    "id": 2,
+    "title": "Wireless Modem 4G/5G",
+    "short": "High speed wireless modem",
+    "price_ghc": 700.0,
+    "old_price_ghc": 780.0,
+    "image": "/static/images/placeholder.png",
+    "featured": true
+  }
+]

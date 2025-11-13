@@ -1,0 +1,522 @@
+{% extends 'base.html' %}
+{% block content %}
+<style>
+    .checkout-container {
+        max-width: 600px;
+        margin: 40px auto;
+        background: #f9f9f9;
+        padding: 30px;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    .checkout-container h2 {
+        color: #333;
+        margin-bottom: 30px;
+        text-align: center;
+    }
+    .order-summary {
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        margin-bottom: 30px;
+        border: 1px solid #ddd;
+    }
+    .order-summary h3 {
+        margin-top: 0;
+        color: #333;
+        font-size: 18px;
+    }
+    .order-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 10px 0;
+        border-bottom: 1px solid #eee;
+    }
+    .order-item:last-child {
+        border-bottom: none;
+    }
+    .order-total {
+        display: flex;
+        justify-content: space-between;
+        padding: 15px 0;
+        font-size: 20px;
+        font-weight: bold;
+        color: #27ae60;
+        border-top: 2px solid #27ae60;
+        margin-top: 10px;
+    }
+    .form-section {
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        border: 1px solid #ddd;
+    }
+    .form-section h3 {
+        margin-top: 0;
+        color: #333;
+        font-size: 16px;
+        border-bottom: 2px solid #27ae60;
+        padding-bottom: 10px;
+    }
+    .form-group {
+        margin-bottom: 15px;
+    }
+    .form-group label {
+        display: block;
+        margin-bottom: 5px;
+        color: #333;
+        font-weight: 500;
+    }
+    .form-group input,
+    .form-group select {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 14px;
+        box-sizing: border-box;
+    }
+    .form-group input:focus,
+    .form-group select:focus {
+        outline: none;
+        border-color: #27ae60;
+        box-shadow: 0 0 0 3px rgba(39, 174, 96, 0.1);
+    }
+    .payment-methods {
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        border: 1px solid #ddd;
+    }
+    .payment-methods h3 {
+        margin-top: 0;
+        color: #333;
+        font-size: 16px;
+        border-bottom: 2px solid #27ae60;
+        padding-bottom: 10px;
+    }
+    .payment-option {
+        margin: 15px 0;
+        padding: 15px;
+        border: 2px solid #ddd;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+    .payment-option:hover {
+        border-color: #27ae60;
+        background: #f0f8f4;
+    }
+    .payment-option input[type="radio"] {
+        margin-right: 10px;
+        cursor: pointer;
+    }
+    .payment-option label {
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        margin: 0;
+    }
+    .payment-option.selected {
+        border-color: #27ae60;
+        background: #f0f8f4;
+    }
+    .wallet-info {
+        font-size: 14px;
+        color: #666;
+        margin-top: 8px;
+        padding-left: 26px;
+    }
+    .wallet-balance {
+        font-weight: bold;
+        color: #27ae60;
+    }
+    .insufficient-balance {
+        color: #e74c3c;
+    }
+    .btn-container {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 15px;
+        margin-top: 30px;
+    }
+    .btn {
+        padding: 12px 20px;
+        border: none;
+        border-radius: 6px;
+        font-size: 16px;
+        font-weight: bold;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+    .btn-primary {
+        background: #27ae60;
+        color: white;
+    }
+    .btn-primary:hover {
+        background: #229954;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(39, 174, 96, 0.3);
+    }
+    .btn-secondary {
+        background: #95a5a6;
+        color: white;
+    }
+    .btn-secondary:hover {
+        background: #7f8c8d;
+    }
+    .btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+    .login-prompt {
+        background: #e8f5e9;
+        border: 1px solid #4caf50;
+        padding: 15px;
+        border-radius: 6px;
+        margin-bottom: 20px;
+        color: #2e7d32;
+    }
+    .login-prompt a {
+        color: #1b5e20;
+        font-weight: bold;
+        text-decoration: none;
+    }
+    .login-prompt a:hover {
+        text-decoration: underline;
+    }
+    .coupon-section {
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        border: 1px solid #ddd;
+    }
+    .coupon-section h3 {
+        margin-top: 0;
+        color: #333;
+        font-size: 16px;
+        border-bottom: 2px solid #27ae60;
+        padding-bottom: 10px;
+    }
+    .coupon-input-group {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 10px;
+    }
+    .coupon-input-group input {
+        flex: 1;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 14px;
+    }
+    .coupon-input-group button {
+        padding: 10px 20px;
+        background: #27ae60;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-weight: bold;
+    }
+    .coupon-input-group button:hover {
+        background: #229954;
+    }
+    .coupon-message {
+        padding: 10px;
+        border-radius: 4px;
+        margin-top: 10px;
+        display: none;
+    }
+    .coupon-message.success {
+        background: #e6ffed;
+        border: 1px solid #4caf50;
+        color: #2e7d32;
+        display: block;
+    }
+    .coupon-message.error {
+        background: #fee;
+        border: 1px solid #c0392b;
+        color: #c0392b;
+        display: block;
+    }
+    .coupon-info {
+        background: #f9f9f9;
+        padding: 10px;
+        border-radius: 4px;
+        margin-top: 10px;
+        display: none;
+        font-size: 14px;
+    }
+    .coupon-info.show {
+        display: block;
+    }
+</style>
+
+<div class="checkout-container">
+    <h2>🛒 CYBER WORLD STORE - Checkout</h2>
+
+    <!-- Coupon Section -->
+    <div class="coupon-section">
+        <h3>🎟️ Have a Promo Code? (Optional)</h3>
+        <div class="coupon-input-group">
+            <input type="text" id="coupon-code" placeholder="Enter coupon code" />
+            <button type="button" onclick="validateCoupon()">Apply</button>
+        </div>
+        <div class="coupon-message" id="coupon-message"></div>
+        <div class="coupon-info" id="coupon-info"></div>
+    </div>
+
+    <!-- Order Summary -->
+    <div class="order-summary">
+        <h3>📋 Order Summary</h3>
+        <div style="border-bottom: 2px solid #27ae60; padding-bottom: 15px; margin-bottom: 15px;">
+            {% for item in items %}
+            <div class="order-item" style="padding: 12px 0;">
+                <div style="flex: 1;">
+                    <strong>{{ item.product.title }}</strong>
+                    <div style="font-size: 12px; color: #666;">Qty: {{ item.qty }}</div>
+                </div>
+                <span style="text-align: right; font-weight: 500;">{{ item.subtotal|money }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        <div style="background: #f5f5f5; padding: 15px; border-radius: 6px; margin-bottom: 15px;">
+            <div class="order-total" style="border-top: none; margin-top: 0; padding-top: 0;">
+                <span>Subtotal:</span>
+                <span id="subtotal">{{ total|money }}</span>
+            </div>
+            <div class="order-total" id="discount-row" style="display: none; border-top: none; margin-top: 8px; padding-top: 0; font-size: 16px; color: #27ae60;">
+                <span>Discount Applied:</span>
+                <span id="discount-amount">-GH₵0.00</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; padding: 15px 0; font-size: 18px; font-weight: bold; color: #27ae60; border-top: 2px solid #ddd; margin-top: 10px;">
+                <span>Final Total:</span>
+                <span id="final-total">{{ total|money }}</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Shipping Information -->
+    <form id="checkout-form" method="post">
+        <input type="hidden" id="applied-coupon-id" name="coupon_id" value="" />
+        
+        <div class="form-section">
+            <h3>� Shipping Information</h3>
+            <div class="form-group">
+                <label for="name">Full Name *</label>
+                <input type="text" id="name" name="name" required placeholder="Enter your full name" />
+            </div>
+            <div class="form-group">
+                <label for="phone">Phone Number *</label>
+                <input type="tel" id="phone" name="phone" required placeholder="Enter your phone number" />
+            </div>
+            <div class="form-group">
+                <label for="city">City/Town *</label>
+                <input type="text" id="city" name="city" required placeholder="Enter your city or town" />
+            </div>
+        </div>
+
+        <!-- Payment Method Selection -->
+        <div class="payment-methods">
+            <h3>💳 Select Payment Method</h3>
+
+            <!-- Login Prompt if Not Authenticated -->
+            {% if not current_user.is_authenticated or not current_user.email %}
+            <div class="login-prompt">
+                ℹ️ <a href="{{ url_for('user_login') }}">Login</a> to access wallet payment or continue with Paystack below.
+            </div>
+            {% endif %}
+
+            <!-- Wallet Payment Option (only if logged in as customer) -->
+            {% if current_user.is_authenticated and current_user.email %}
+            <div class="payment-option" id="wallet-option" onclick="selectPaymentMethod('wallet')">
+                <label>
+                    <input type="radio" name="payment_method" value="wallet" id="method-wallet" />
+                    <strong>💰 Pay with Wallet Balance</strong>
+                </label>
+                <div class="wallet-info">
+                    {% if current_user.wallet %}
+                        {% if current_user.wallet.balance >= total %}
+                            <span>✅ Available balance: <span class="wallet-balance">{{ current_user.wallet.balance|money }}</span></span>
+                        {% else %}
+                            <span class="insufficient-balance">❌ Insufficient balance ({{ current_user.wallet.balance|money }})</span>
+                        {% endif %}
+                    {% else %}
+                        <span class="insufficient-balance">❌ No wallet found</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Paystack Payment Option -->
+            <div class="payment-option" id="paystack-option" onclick="selectPaymentMethod('paystack')">
+                <label>
+                    <input type="radio" name="payment_method" value="paystack" id="method-paystack" checked />
+                    <strong>💳 Pay with Paystack</strong>
+                </label>
+                <div class="wallet-info">
+                    ✓ Fast, secure, and trusted payment gateway
+                </div>
+            </div>
+        </div>
+
+        <!-- Email Field (for Paystack) -->
+        <div class="form-section" id="email-section">
+            <h3>📧 Notification Email</h3>
+            <div class="form-group">
+                <label for="email">Email Address * <span style="font-size: 12px; color: #666;">(where we'll send order confirmation)</span></label>
+                {% if current_user.is_authenticated and current_user.email %}
+                    <input type="email" id="email" name="email" value="{{ current_user.email }}" required />
+                {% else %}
+                    <input type="email" id="email" name="email" required placeholder="Enter your email address" />
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="btn-container">
+            <a href="{{ url_for('view_cart') }}" class="btn btn-secondary">← Back to Cart</a>
+            <button type="submit" class="btn btn-primary" id="submit-btn">
+                {% if current_user.is_authenticated and current_user.email %}
+                    Pay {{ total|money }}
+                {% else %}
+                    Continue to Paystack
+                {% endif %}
+            </button>
+        </div>
+    </form>
+</div>
+
+<script>
+    function selectPaymentMethod(method) {
+        const walletRadio = document.getElementById('method-wallet');
+        const paystackRadio = document.getElementById('method-paystack');
+        const walletOption = document.getElementById('wallet-option');
+        const paystackOption = document.getElementById('paystack-option');
+        const emailSection = document.getElementById('email-section');
+        const submitBtn = document.getElementById('submit-btn');
+        const form = document.getElementById('checkout-form');
+
+        if (method === 'wallet') {
+            walletRadio.checked = true;
+            paystackRadio.checked = false;
+            walletOption.classList.add('selected');
+            paystackOption.classList.remove('selected');
+            emailSection.style.display = 'none';
+            submitBtn.textContent = 'Pay {{ total|money }} with Wallet';
+            
+            // Change form action to wallet payment
+            form.action = '/pay/wallet';
+        } else {
+            paystackRadio.checked = true;
+            walletRadio.checked = false;
+            paystackOption.classList.add('selected');
+            walletOption.classList.remove('selected');
+            emailSection.style.display = 'block';
+            submitBtn.textContent = 'Continue to Paystack';
+            
+            // Change form action to paystack
+            form.action = '/pay/paystack';
+        }
+    }
+
+    // Handle radio button change events
+    document.querySelectorAll('input[name="payment_method"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+            selectPaymentMethod(this.value);
+        });
+    });
+
+    // Set initial state
+    const walletOption = document.getElementById('wallet-option');
+    if (walletOption) {
+        const walletRadio = document.getElementById('method-wallet');
+        if (walletRadio.disabled) {
+            selectPaymentMethod('paystack');
+        }
+    }
+
+    // Form submission
+    document.getElementById('checkout-form').addEventListener('submit', function(e) {
+        const name = document.getElementById('name').value.trim();
+        const phone = document.getElementById('phone').value.trim();
+        const city = document.getElementById('city').value.trim();
+        const method = document.querySelector('input[name="payment_method"]:checked').value;
+
+        if (!name || !phone || !city) {
+            e.preventDefault();
+            alert('Please enter your name, phone number, and city/town.');
+            return false;
+        }
+
+        // If wallet payment, disable email field (not needed)
+        if (method === 'wallet') {
+            document.getElementById('email').disabled = true;
+        }
+    });
+
+    // Coupon validation
+    function validateCoupon() {
+        const code = document.getElementById('coupon-code').value.trim();
+            const subtotal = parseFloat('{{ total }}');
+        
+        if (!code) {
+            showCouponMessage('Please enter a coupon code.', 'error');
+            return;
+        }
+
+        fetch('/api/validate-coupon', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: 'code=' + encodeURIComponent(code) + '&total=' + subtotal
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.valid) {
+                showCouponMessage(data.message, 'success');
+                updateOrderTotal(data.discount, data.final_total, data.coupon_id);
+                document.getElementById('coupon-info').classList.add('show');
+                document.getElementById('coupon-info').innerHTML = 
+                    `<strong>✓ Coupon Applied!</strong><br>Discount: ${data.discount_type === 'percent' ? data.discount_value + '%' : 'GH₵' + data.discount_value.toFixed(2)}<br>You saved: GH₵${data.discount.toFixed(2)}`;
+            } else {
+                showCouponMessage(data.message, 'error');
+                document.getElementById('coupon-info').classList.remove('show');
+                resetOrderTotal();
+            }
+        })
+        .catch(e => {
+            showCouponMessage('Error validating coupon: ' + e, 'error');
+        });
+    }
+
+    function showCouponMessage(msg, type) {
+        const msgEl = document.getElementById('coupon-message');
+        msgEl.textContent = msg;
+        msgEl.className = 'coupon-message ' + type;
+    }
+
+    function updateOrderTotal(discount, finalTotal, couponId) {
+        document.getElementById('discount-row').style.display = 'flex';
+        document.getElementById('discount-amount').textContent = '-GH₵' + discount.toFixed(2);
+        document.getElementById('final-total').textContent = 'GH₵' + finalTotal.toFixed(2);
+        document.getElementById('applied-coupon-id').value = couponId;
+    }
+
+    function resetOrderTotal() {
+        document.getElementById('discount-row').style.display = 'none';
+        document.getElementById('final-total').textContent = '{{ total|money }}';
+        document.getElementById('applied-coupon-id').value = '';
+    }
+
+    // Allow Enter key to apply coupon
+    document.getElementById('coupon-code').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            validateCoupon();
+        }
+    });
+</script>
+{% endblock %}

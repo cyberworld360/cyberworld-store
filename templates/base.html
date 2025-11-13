@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CyberWorld Store</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+      :root {
+        --primary-color: {{ settings.primary_color }};
+        --secondary-color: {{ settings.secondary_color }};
+        --primary-font: {{ settings.primary_font }};
+        --secondary-font: {{ settings.secondary_font }};
+      }
+      body {
+        font-family: var(--primary-font);
+      }
+      h1, h2, h3, h4, h5, h6 {
+        font-family: var(--secondary-font);
+      }
+    </style>
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container">
+        <div class="brand">
+          <a href="/" class="logo-link">
+            <img src="{{ settings.logo_image }}" alt="CyberWorld" class="logo-img" />
+          </a>
+        </div>
+        <nav class="main-nav">
+          <a href="/">Home</a>
+          <a href="/cart">Cart</a>
+          {% if current_user.is_authenticated %}
+            {% if current_user.username is defined %}
+              <!-- Admin user -->
+              <a href="/admin">Admin</a>
+              <a href="/admin/wallets">Wallets</a>
+              <a href="/admin/sliders">Sliders</a>
+              <a href="/admin/coupons">Coupons</a>
+              <a href="/admin/settings">Settings</a>
+              <a href="/admin/logout">Admin Logout</a>
+            {% else %}
+              <!-- Customer user -->
+              <span style="margin-left: 1rem; color: #fff;">{{ current_user.email }}</span>
+              <a href="/logout">Logout</a>
+            {% endif %}
+          {% else %}
+            <a href="/register">Register</a>
+            <a href="/login">Customer Login</a>
+            <a href="/admin/login">Admin</a>
+          {% endif %}
+        </nav>
+      </div>
+    </header>
+    <main class="container">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <div class="flash-list">
+            {% for category, msg in messages %}
+              <div class="flash {{ category }}">{{ msg }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endwith %}
+      {% block content %}{% endblock %}
+    </main>
+    <footer class="site-footer">
+      <div class="container">© {{ now.year }} CyberWorld</div>
+    </footer>
+    
+    <script>
+      // Simple autoslider for ads (rotates images)
+      document.addEventListener('DOMContentLoaded', function(){
+        // Ads slider
+        const ads = document.querySelectorAll('.ads-slider .slide');
+        let adIndex = 0;
+        if (ads.length > 0) {
+          setInterval(() => {
+            ads[adIndex].classList.remove('active');
+            adIndex = (adIndex + 1) % ads.length;
+            ads[adIndex].classList.add('active');
+          }, 4000);
+        }
+
+        // Featured product slider controls
+        const prevBtn = document.querySelector('.featured-prev');
+        const nextBtn = document.querySelector('.featured-next');
+        const track = document.querySelector('.featured-track');
+        if (prevBtn && nextBtn && track) {
+          const cardWidth = track.querySelector('.card').offsetWidth + 16;
+          prevBtn.addEventListener('click', () => { track.scrollBy({ left: -cardWidth, behavior: 'smooth' }); });
+          nextBtn.addEventListener('click', () => { track.scrollBy({ left: cardWidth, behavior: 'smooth' }); });
+        }
+      });
+    </script>
+  </body>
+</html>

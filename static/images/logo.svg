@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="48" viewBox="0 0 240 48" role="img" aria-label="CyberWorld logo">
+  <rect width="240" height="48" rx="8" fill="#0b0b0b" />
+  <text x="20" y="32" font-family="Segoe UI, Roboto, Arial" font-size="20" fill="#fff">CyberWorld</text>
+  <circle cx="200" cy="24" r="10" fill="#28a745" />
+</svg>

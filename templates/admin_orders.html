@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1>Orders</h1>
+<p><a class="btn btn-primary" href="{{ url_for('admin_index') }}">Back to dashboard</a></p>
+<table class="table table-striped">
+  <thead>
+    <tr>
+      <th>Ref</th>
+      <th>Customer</th>
+      <th>Total</th>
+      <th>Paid</th>
+      <th>Status</th>
+      <th>Created</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for o in orders %}
+    <tr>
+      <td>{{ o.reference[:8] }}</td>
+      <td>{{ o.email }}</td>
+      <td>{{ o.total|money }}</td>
+      <td>{{ 'Yes' if o.paid else 'No' }}</td>
+      <td>{{ o.status }}</td>
+      <td>{{ o.created_at }}</td>
+      <td><a href="{{ url_for('admin_order_detail', oid=o.id) }}" class="btn btn-sm btn-info">View</a></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7">No orders yet.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

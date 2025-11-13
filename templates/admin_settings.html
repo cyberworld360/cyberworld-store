@@ -1,0 +1,356 @@
+{% extends 'base.html' %}
+{% block content %}
+<style>
+    .settings-container {
+        max-width: 900px;
+        margin: 40px auto;
+        padding: 30px;
+        background: #f9f9f9;
+        border-radius: 8px;
+    }
+    .settings-container h2 {
+        color: #333;
+        margin-bottom: 30px;
+        border-bottom: 2px solid #27ae60;
+        padding-bottom: 15px;
+    }
+    .settings-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 30px;
+        margin-bottom: 30px;
+    }
+    .settings-section {
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        border: 1px solid #ddd;
+    }
+    .settings-section h3 {
+        color: #333;
+        margin-top: 0;
+        margin-bottom: 20px;
+        font-size: 18px;
+        border-bottom: 1px solid #eee;
+        padding-bottom: 10px;
+    }
+    .form-group {
+        margin-bottom: 20px;
+    }
+    .form-group label {
+        display: block;
+        margin-bottom: 8px;
+        color: #333;
+        font-weight: 600;
+        font-size: 14px;
+    }
+    .form-group input,
+    .form-group textarea {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 14px;
+        box-sizing: border-box;
+    }
+    .form-group input[type="color"] {
+        height: 50px;
+        cursor: pointer;
+    }
+    .form-group input:focus,
+    .form-group textarea:focus {
+        outline: none;
+        border-color: #27ae60;
+        box-shadow: 0 0 0 3px rgba(39, 174, 96, 0.1);
+    }
+    .form-group small {
+        display: block;
+        color: #666;
+        margin-top: 5px;
+        font-size: 12px;
+    }
+    .file-input-wrapper {
+        position: relative;
+        display: inline-block;
+        width: 100%;
+    }
+    .file-input-label {
+        display: block;
+        padding: 12px;
+        background: #f0f0f0;
+        border: 2px dashed #27ae60;
+        border-radius: 4px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+    .file-input-label:hover {
+        background: #e8f5e9;
+        border-color: #229954;
+    }
+    .file-input-wrapper input[type="file"] {
+        display: none;
+    }
+    .preview-image {
+        max-width: 100%;
+        max-height: 150px;
+        margin-top: 10px;
+        border-radius: 4px;
+        border: 1px solid #ddd;
+    }
+    .color-preview {
+        display: inline-block;
+        width: 40px;
+        height: 40px;
+        border: 2px solid #ddd;
+        border-radius: 4px;
+        margin-left: 10px;
+        vertical-align: middle;
+    }
+    .btn-save {
+        background: #27ae60;
+        color: white;
+        padding: 12px 30px;
+        border: none;
+        border-radius: 6px;
+        font-size: 16px;
+        font-weight: bold;
+        cursor: pointer;
+        transition: all 0.3s;
+        width: 100%;
+    }
+    .btn-save:hover {
+        background: #229954;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(39, 174, 96, 0.3);
+    }
+    .btn-save:active {
+        transform: translateY(0);
+    }
+    .current-image {
+        margin-top: 15px;
+        padding: 15px;
+        background: #f5f5f5;
+        border-radius: 4px;
+        border-left: 4px solid #27ae60;
+    }
+    .current-image label {
+        margin: 0;
+        margin-bottom: 10px;
+        font-size: 12px;
+        font-weight: bold;
+        color: #666;
+    }
+    .current-image img {
+        max-width: 100%;
+        max-height: 100px;
+        border-radius: 3px;
+    }
+    .font-preview {
+        padding: 15px;
+        background: #f9f9f9;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        margin-top: 10px;
+        font-size: 16px;
+    }
+    @media (max-width: 768px) {
+        .settings-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+
+<div class="settings-container">
+    <h2>⚙️ Site Settings & Customization</h2>
+    
+    <form method="post" enctype="multipart/form-data">
+        <div class="settings-grid">
+            <!-- Logo Section -->
+            <div class="settings-section">
+                <h3>📷 Logo</h3>
+                
+                <div class="form-group">
+                    <label for="logo_file">Upload Logo (PNG, JPG, GIF)</label>
+                    <div class="file-input-wrapper">
+                        <label class="file-input-label" for="logo_file">
+                            📁 Click to upload or drag & drop
+                        </label>
+                        <input type="file" id="logo_file" name="logo_file" accept="image/*" />
+                    </div>
+                    <small>Recommended size: 240x48px</small>
+                </div>
+
+                {% if settings.logo_image %}
+                <div class="current-image">
+                    <label>Current Logo:</label>
+                    <img src="{{ settings.logo_image }}" alt="Logo" />
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Banners Section -->
+            <div class="settings-section">
+                <h3>🎨 Banner Slider</h3>
+                
+                <div class="form-group">
+                    <label for="banner1_file">Banner 1 (PNG, JPG, GIF)</label>
+                    <div class="file-input-wrapper">
+                        <label class="file-input-label" for="banner1_file">
+                            📁 Upload Banner 1
+                        </label>
+                        <input type="file" id="banner1_file" name="banner1_file" accept="image/*" />
+                    </div>
+                    <small>Recommended size: 1200x300px</small>
+                    {% if settings.banner1_image %}
+                    <div class="current-image">
+                        <label>Current:</label>
+                        <img src="{{ settings.banner1_image }}" alt="Banner 1" />
+                    </div>
+                    {% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label for="banner2_file">Banner 2 (PNG, JPG, GIF)</label>
+                    <div class="file-input-wrapper">
+                        <label class="file-input-label" for="banner2_file">
+                            📁 Upload Banner 2
+                        </label>
+                        <input type="file" id="banner2_file" name="banner2_file" accept="image/*" />
+                    </div>
+                    <small>Recommended size: 1200x300px</small>
+                    {% if settings.banner2_image %}
+                    <div class="current-image">
+                        <label>Current:</label>
+                        <img src="{{ settings.banner2_image }}" alt="Banner 2" />
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Background Section -->
+            <div class="settings-section">
+                <h3>🖼️ Background Image</h3>
+                
+                <div class="form-group">
+                    <label for="bg_file">Homepage Background (PNG, JPG, GIF)</label>
+                    <div class="file-input-wrapper">
+                        <label class="file-input-label" for="bg_file">
+                            📁 Upload Background
+                        </label>
+                        <input type="file" id="bg_file" name="bg_file" accept="image/*" />
+                    </div>
+                    <small>Recommended size: 1920x1080px</small>
+                    {% if settings.bg_image %}
+                    <div class="current-image">
+                        <label>Current:</label>
+                        <img src="{{ settings.bg_image }}" alt="Background" />
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Fonts Section -->
+            <div class="settings-section">
+                <h3>🔤 Fonts</h3>
+                
+                <div class="form-group">
+                    <label for="primary_font">Primary Font (Body Text)</label>
+                    <input type="text" id="primary_font" name="primary_font" value="{{ settings.primary_font }}" placeholder="Arial, sans-serif" />
+                    <small>Examples: Arial, Helvetica, Verdana, Georgia, 'Times New Roman'</small>
+                    <div class="font-preview" style="font-family: {{ settings.primary_font }}">
+                        Sample text with {{ settings.primary_font }}
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="secondary_font">Secondary Font (Headings)</label>
+                    <input type="text" id="secondary_font" name="secondary_font" value="{{ settings.secondary_font }}" placeholder="Verdana, sans-serif" />
+                    <small>Examples: Arial, Helvetica, Verdana, Georgia, 'Courier New'</small>
+                    <div class="font-preview" style="font-family: {{ settings.secondary_font }}">
+                        <strong>Sample Heading with {{ settings.secondary_font }}</strong>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Colors Section -->
+            <div class="settings-section">
+                <h3>🎨 Colors</h3>
+                
+                <div class="form-group">
+                    <label for="primary_color">Primary Color (Buttons, Links)</label>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <input type="color" id="primary_color" name="primary_color" value="{{ settings.primary_color }}" />
+                        <span class="color-preview" style="background: {{ settings.primary_color }};"></span>
+                        <input type="text" value="{{ settings.primary_color }}" readonly style="flex: 1; max-width: 150px;" />
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="secondary_color">Secondary Color (Accents)</label>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <input type="color" id="secondary_color" name="secondary_color" value="{{ settings.secondary_color }}" />
+                        <span class="color-preview" style="background: {{ settings.secondary_color }};"></span>
+                        <input type="text" value="{{ settings.secondary_color }}" readonly style="flex: 1; max-width: 150px;" />
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <button type="submit" class="btn-save">💾 Save All Settings</button>
+    </form>
+</div>
+
+<script>
+    // Drag and drop file handling
+    document.querySelectorAll('.file-input-wrapper').forEach(wrapper => {
+        const fileInput = wrapper.querySelector('input[type="file"]');
+        const label = wrapper.querySelector('.file-input-label');
+
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            wrapper.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            wrapper.addEventListener(eventName, highlight, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            wrapper.addEventListener(eventName, unhighlight, false);
+        });
+
+        function highlight(e) {
+            label.style.background = '#d4edda';
+            label.style.borderColor = '#27ae60';
+        }
+
+        function unhighlight(e) {
+            label.style.background = '#f0f0f0';
+            label.style.borderColor = '#27ae60';
+        }
+
+        wrapper.addEventListener('drop', handleDrop, false);
+
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            fileInput.files = files;
+        }
+    });
+
+    // Show filename when selected
+    document.querySelectorAll('input[type="file"]').forEach(fileInput => {
+        fileInput.addEventListener('change', function() {
+            const label = this.parentElement.querySelector('.file-input-label');
+            if (this.files.length > 0) {
+                label.textContent = '✓ ' + this.files[0].name + ' selected';
+            }
+        });
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300" role="img" aria-label="Ad 1">
+  <defs>
+    <linearGradient id="g1" x1="0" x2="1">
+      <stop offset="0" stop-color="#007bff"/>
+      <stop offset="1" stop-color="#6610f2"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="300" fill="url(#g1)" rx="8"/>
+  <text x="60" y="170" font-family="Segoe UI, Roboto, Arial" font-size="48" fill="#fff">Big Savings — Up to 50% off</text>
+</svg>

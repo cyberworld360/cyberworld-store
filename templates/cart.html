@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>Your cart</h2>
+{% if items %}
+<form action="/cart/update" method="post">
+  <table class="cart-table">
+    <thead><tr><th>Product</th><th>Price</th><th>Qty</th><th>Subtotal</th></tr></thead>
+    <tbody>
+      {% for it in items %}
+      <tr>
+        <td>{{ it.product.title }}</td>
+        <td>{{ it.product.price_ghc|money }}</td>
+        <td><input type="number" name="qty_{{ it.product.id }}" value="{{ it.qty }}" min="0" /></td>
+        <td>{{ it.subtotal|money }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="total">Total: {{ total|money }}</p>
+  <button class="btn" type="submit">Update cart</button>
+  <a class="btn-outline" href="/checkout">Proceed to checkout</a>
+</form>
+<a class="btn-danger" href="/cart/clear">Clear cart</a>
+{% else %}
+<p>Your cart is empty.</p>
+{% endif %}
+{% endblock %}

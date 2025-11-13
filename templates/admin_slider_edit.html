@@ -1,0 +1,121 @@
+{% extends 'base.html' %}
+{% block content %}
+<style>
+    .form-container { max-width: 800px; margin: 40px auto; padding: 30px; background: #f9f9f9; border-radius: 8px; }
+    .form-container h2 { color: #333; margin-top: 0; border-bottom: 2px solid #27ae60; padding-bottom: 15px; }
+    .form-group { margin-bottom: 20px; }
+    .form-group label { display: block; margin-bottom: 8px; color: #333; font-weight: 600; }
+    .form-group input, .form-group textarea, .form-group select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box; }
+    .form-group input:focus, .form-group textarea:focus, .form-group select:focus { outline: none; border-color: #27ae60; box-shadow: 0 0 0 3px rgba(39, 174, 96, 0.1); }
+    .form-group textarea { resize: vertical; min-height: 80px; }
+    .form-group small { display: block; color: #666; margin-top: 5px; }
+    .products-selector { background: white; border: 1px solid #ddd; border-radius: 4px; max-height: 300px; overflow-y: auto; }
+    .products-selector .product-checkbox { padding: 10px; border-bottom: 1px solid #eee; display: flex; align-items: center; }
+    .products-selector .product-checkbox:last-child { border-bottom: none; }
+    .products-selector input[type="checkbox"] { margin-right: 10px; width: auto; }
+    .products-selector label { margin: 0; cursor: pointer; flex: 1; }
+    .checkbox-group { display: flex; align-items: center; }
+    .checkbox-group input[type="checkbox"] { margin-right: 10px; width: auto; }
+    .checkbox-group label { margin: 0; font-weight: normal; }
+    .selected-products { background: white; padding: 10px; border-radius: 4px; margin-top: 10px; min-height: 30px; }
+    .selected-products .tag { display: inline-block; background: #e3f2fd; color: #1976d2; padding: 4px 8px; border-radius: 3px; margin: 3px; font-size: 12px; }
+    .btn-container { display: flex; gap: 10px; margin-top: 30px; }
+    .btn { padding: 12px 20px; border-radius: 6px; font-size: 14px; font-weight: bold; cursor: pointer; border: none; text-decoration: none; display: inline-block; }
+    .btn-primary { background: #27ae60; color: white; flex: 1; }
+    .btn-primary:hover { background: #229954; }
+    .btn-secondary { background: #95a5a6; color: white; }
+    .btn-secondary:hover { background: #7f8c8d; }
+</style>
+
+<div class="form-container">
+    <h2>{% if slider %}✏️ Edit Slider{% else %}🎪 Create Slider{% endif %}</h2>
+
+    <form method="post">
+        <div class="form-group">
+            <label for="name">Slider Name *</label>
+            <input type="text" id="name" name="name" value="{{ slider.name if slider else '' }}" required placeholder="e.g., Summer Sales" {% if slider %}disabled{% endif %} />
+            <small>Unique internal name (not shown to customers)</small>
+        </div>
+
+        <div class="form-group">
+            <label for="title">Slider Title *</label>
+            <input type="text" id="title" name="title" value="{{ slider.title if slider else '' }}" required placeholder="e.g., Hot Summer Deals" />
+            <small>Displayed above the slider on the homepage</small>
+        </div>
+
+        <div class="form-group">
+            <label for="description">Description</label>
+            <textarea id="description" name="description" placeholder="Optional description">{{ slider.description if slider else '' }}</textarea>
+        </div>
+
+        <div class="form-group">
+            <label>Products *</label>
+            <small>Select products to display in this slider</small>
+            
+            <div class="products-selector">
+                {% if products %}
+                    {% for product in products %}
+                    <div class="product-checkbox">
+                        <input type="checkbox" id="prod_{{ product.id }}" name="products" value="{{ product.id }}" 
+                            {% if slider and product in slider.products %}checked{% endif %} />
+                        <label for="prod_{{ product.id }}">
+                            <strong>{{ product.title }}</strong>
+                            <br><small style="color: #999;">{{ product.price_ghc|money }} {% if product.old_price_ghc %}/ <s>{{ product.old_price_ghc|money }}</s>{% endif %}</small>
+                        </label>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                <div class="product-checkbox" style="color: #999;">
+                    No products available. <a href="/admin/new">Create products first</a>
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="selected-products" id="selected-display">
+                {% if slider and slider.products %}
+                    {% for product in slider.products %}
+                    <span class="tag">{{ product.title }}</span>
+                    {% endfor %}
+                {% else %}
+                    <em style="color: #999;">No products selected</em>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if slider %}
+        <div class="form-group checkbox-group">
+            <input type="checkbox" id="is_active" name="is_active" {% if slider.is_active %}checked{% endif %} />
+            <label for="is_active">Active (Display this slider on homepage)</label>
+        </div>
+        {% else %}
+        <input type="hidden" name="is_active" value="on" />
+        {% endif %}
+
+        <div class="btn-container">
+            <a href="/admin/sliders" class="btn btn-secondary">← Back</a>
+            <button type="submit" class="btn btn-primary">{% if slider %}✓ Update Slider{% else %}✓ Create Slider{% endif %}</button>
+        </div>
+    </form>
+</div>
+
+<script>
+    // Update selected products display
+    document.querySelectorAll('input[name="products"]').forEach(checkbox => {
+        checkbox.addEventListener('change', updateSelectedDisplay);
+    });
+
+    function updateSelectedDisplay() {
+        const selected = document.querySelectorAll('input[name="products"]:checked');
+        const display = document.getElementById('selected-display');
+        
+        if (selected.length === 0) {
+            display.innerHTML = '<em style="color: #999;">No products selected</em>';
+        } else {
+            display.innerHTML = Array.from(selected).map(cb => {
+                const label = document.querySelector(`label[for="${cb.id}"]`).innerText.split('\n')[0];
+                return `<span class="tag">${label}</span>`;
+            }).join('');
+        }
+    }
+</script>
+{% endblock %}

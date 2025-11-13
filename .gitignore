@@ -1,0 +1,41 @@
+.python-version
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.venv/
+venv/
+ENV/
+env/
+
+# Flask
+instance/
+.webassets-cache
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+data.db
+
+# Environment
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Uploads
+static/images/uploads/
+static/uploads/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Cache
+*.cache
+.pytest_cache/
