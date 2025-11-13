@@ -21,3 +21,11 @@ Example: add a secret
 Security notes:
 - Rotate any secret immediately if it was ever committed (or exposed) in the repository.
 - Limit secret access in organization settings if needed.
+
+Additional deployment secrets (Heroku / Docker):
+- `HEROKU_API_KEY` : Heroku API key (use for GitHub Actions deploys)
+- `HEROKU_APP_NAME` : Heroku app name to deploy to
+- `HEROKU_EMAIL` : Email address for the Heroku account
+- `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` : If you prefer to build and push Docker images to Docker Hub
+
+Note: Add these values via `Settings -> Secrets and variables -> Actions` before pushing to trigger deployment workflows.

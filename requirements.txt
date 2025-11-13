@@ -6,4 +6,5 @@ requests==2.31.0
 Werkzeug==2.3.7
 gunicorn==20.1.0
 Flask-Migrate==4.0.4
-alembic==2.1.0
+alembic==1.17.1
+asgiref==3.9.0
