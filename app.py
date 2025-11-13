@@ -701,7 +701,8 @@ def initdb_command():
         if not has_card_size:
             try:
                 with db.engine.connect() as conn:
-                    conn.execute("ALTER TABLE product ADD COLUMN card_size VARCHAR(20) DEFAULT 'medium'")
+                    # Use exec_driver_sql to run raw DDL on the underlying DB connection (compatible with SQLAlchemy 1.4+)
+                    conn.exec_driver_sql("ALTER TABLE product ADD COLUMN card_size VARCHAR(20) DEFAULT 'medium'")
                 print('Added missing `card_size` column to product table')
             except Exception:
                 print('Could not add card_size column automatically; please run migrations')
