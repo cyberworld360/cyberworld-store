@@ -34,7 +34,7 @@ jobs:
         run: |
           echo "This job is a placeholder. Use repository secrets to deploy to your host."
         env:
-          PAYSTACK_SECRET_KEY: ${{ secrets.PAYSTACK_SECRET_KEY }}
-          PAYSTACK_PUBLIC_KEY: ${{ secrets.PAYSTACK_PUBLIC_KEY }}
-          MAIL_USERNAME: ${{ secrets.MAIL_USERNAME }}
-          MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
+          PAYSTACK_SECRET_KEY: ${{ secrets.PAYSTACK_SECRET_KEY || '' }}
+          PAYSTACK_PUBLIC_KEY: ${{ secrets.PAYSTACK_PUBLIC_KEY || '' }}
+          MAIL_USERNAME: ${{ secrets.MAIL_USERNAME || '' }}
+          MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD || '' }}
