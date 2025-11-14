@@ -1,0 +1,133 @@
+#!/usr/bin/env python3
+"""
+Vercel deployment automation script
+This script sets up and deploys the Flask app to Vercel automatically
+"""
+
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+def run_command(cmd, description):
+    """Run a shell command with error handling"""
+    print(f"\n{'='*60}")
+    print(f"📌 {description}")
+    print(f"{'='*60}")
+    print(f"$ {cmd}\n")
+    
+    result = subprocess.run(cmd, shell=True, capture_output=False)
+    if result.returncode != 0:
+        print(f"\n❌ Failed: {description}")
+        return False
+    print(f"✅ Success: {description}")
+    return True
+
+def main():
+    base_dir = Path(__file__).parent
+    
+    print("""
+╔═══════════════════════════════════════════════════════════╗
+║     CyberWorld Store - Vercel Deployment Automation      ║
+║                                                          ║
+║  This script will:                                       ║
+║  1. Check dependencies                                   ║
+║  2. Validate configuration                               ║
+║  3. Build and test the Flask app                        ║
+║  4. Deploy to Vercel                                     ║
+║  5. Configure environment variables                      ║
+╚═══════════════════════════════════════════════════════════╝
+    """)
+    
+    # Step 1: Check Node.js and Vercel CLI
+    print("\n🔍 Checking prerequisites...")
+    
+    if not run_command("node --version", "Check Node.js"):
+        print("⚠️  Node.js not found. Please install from https://nodejs.org")
+        return False
+    
+    if not run_command("npm --version", "Check npm"):
+        print("⚠️  npm not found")
+        return False
+    
+    # Install Vercel CLI if not present
+    run_command("npm install -g vercel", "Install Vercel CLI")
+    
+    # Step 2: Validate local environment
+    print("\n🔍 Validating configuration...")
+    env_file = base_dir / ".env"
+    if not env_file.exists():
+        print(f"❌ .env file not found at {env_file}")
+        return False
+    print(f"✅ .env file found")
+    
+    # Step 3: Check Python and dependencies
+    print("\n🐍 Checking Python environment...")
+    run_command(".venv\\Scripts\\python.exe --version", "Check Python version")
+    run_command(".venv\\Scripts\\pip.exe install -r requirements.txt", "Install Python dependencies")
+    
+    # Step 4: Test Flask app syntax
+    print("\n🧪 Testing Flask app...")
+    run_command(".venv\\Scripts\\python.exe -m py_compile app.py", "Check app.py syntax")
+    
+    # Step 5: Check API wrapper
+    run_command(".venv\\Scripts\\python.exe -m py_compile api/index.py", "Check API wrapper syntax")
+    
+    # Step 6: Git operations
+    print("\n📦 Preparing Git...")
+    run_command("git status", "Check git status")
+    run_command("git add -A", "Stage all changes")
+    run_command('git commit -m "chore: Prepare for Vercel deployment" || true', "Commit changes")
+    run_command("git push origin main", "Push to GitHub")
+    
+    # Step 7: Vercel login (interactive)
+    print("\n🔐 Vercel authentication...")
+    print("Please login to Vercel (if not already logged in):")
+    run_command("vercel login", "Login to Vercel")
+    
+    # Step 8: Deploy
+    print("\n🚀 Deploying to Vercel...")
+    
+    env_vars = []
+    env_file_content = env_file.read_text()
+    for line in env_file_content.splitlines():
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            key, value = line.split("=", 1)
+            value = value.strip().strip('"\'')
+            env_vars.append(f'--env "{key}={value}"')
+    
+    env_args = " ".join(env_vars)
+    
+    deploy_cmd = f"vercel --prod {env_args}"
+    if not run_command(deploy_cmd, "Deploy to Vercel"):
+        print("\n⚠️  Deployment may have issues. Check your Vercel account.")
+        print("Manual deployment: https://vercel.com/new")
+        return False
+    
+    # Step 9: Get deployment info
+    print("\n📍 Retrieving deployment info...")
+    run_command("vercel ls --limit 5", "List recent deployments")
+    
+    print("""
+╔═══════════════════════════════════════════════════════════╗
+║             ✅ Deployment Complete!                      ║
+║                                                          ║
+║  Next steps:                                             ║
+║  1. Visit: https://vercel.com/dashboard                 ║
+║  2. Configure GitHub Secrets for:                       ║
+║     - VERCEL_TOKEN                                      ║
+║     - VERCEL_ORG_ID                                     ║
+║     - VERCEL_PROJECT_ID                                 ║
+║  3. Test your live app:                                 ║
+║     - Check email delivery                              ║
+║     - Test Paystack payments                            ║
+║     - Test wallet transactions                          ║
+╚═══════════════════════════════════════════════════════════╝
+    """)
+    
+    return True
+
+if __name__ == "__main__":
+    success = main()
+    sys.exit(0 if success else 1)
