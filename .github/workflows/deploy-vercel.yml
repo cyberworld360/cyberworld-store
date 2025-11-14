@@ -1,0 +1,68 @@
+name: Deploy to Vercel
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel
+
+      - name: Deploy to Vercel
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          vercel deploy --prod \
+            --env SECRET_KEY="${{ secrets.SECRET_KEY }}" \
+            --env ADMIN_PASSWORD="${{ secrets.ADMIN_PASSWORD }}" \
+            --env PAYSTACK_SECRET_KEY="${{ secrets.PAYSTACK_SECRET_KEY }}" \
+            --env PAYSTACK_PUBLIC_KEY="${{ secrets.PAYSTACK_PUBLIC_KEY }}" \
+            --env PAYSTACK_CALLBACK_URL="${{ secrets.PAYSTACK_CALLBACK_URL }}" \
+            --env MAIL_SERVER="${{ secrets.MAIL_SERVER }}" \
+            --env MAIL_PORT="${{ secrets.MAIL_PORT }}" \
+            --env MAIL_USERNAME="${{ secrets.MAIL_USERNAME }}" \
+            --env MAIL_PASSWORD="${{ secrets.MAIL_PASSWORD }}" \
+            --env MAIL_USE_TLS="${{ secrets.MAIL_USE_TLS }}" \
+            --env MAIL_USE_SSL="${{ secrets.MAIL_USE_SSL }}" \
+            --env MAIL_DEFAULT_SENDER="${{ secrets.MAIL_DEFAULT_SENDER }}" \
+            --env ADMIN_EMAIL="${{ secrets.ADMIN_EMAIL }}" \
+            --token $VERCEL_TOKEN
+
+      - name: Get deployment URL
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          echo "✅ Deployment successful!"
+          vercel --token $VERCEL_TOKEN ls --limit 1
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '✅ Deployed to Vercel! Preview URL available above.'
+            })
