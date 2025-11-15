@@ -42,6 +42,8 @@ import threading
 import time
 from email.utils import parseaddr
 import json as _json
+import logging
+import sys
 
 # Optional modern integrations
 REDIS_URL = os.environ.get("REDIS_URL", "")
@@ -82,6 +84,16 @@ else:
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["UPLOAD_FOLDER"] = str(UPLOAD_FOLDER)
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024  # 5MB
+
+# Configure structured logging to stdout so Vercel captures full logs and tracebacks
+log_level = logging.DEBUG if os.environ.get("DEBUG", "").lower() in ("1", "true", "yes") else logging.INFO
+stream_handler = logging.StreamHandler(sys.stdout)
+stream_handler.setLevel(log_level)
+stream_formatter = logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s')
+stream_handler.setFormatter(stream_formatter)
+if not any(isinstance(h, logging.StreamHandler) for h in app.logger.handlers):
+    app.logger.addHandler(stream_handler)
+app.logger.setLevel(log_level)
 
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif"}
 PAYSTACK_SECRET = os.environ.get("PAYSTACK_SECRET_KEY", "")
@@ -160,6 +172,23 @@ def init_db_on_first_request():
             print(f"[db error] Initialization failed: {e}")
         # Mark as attempted to avoid retry loops
         app.config['_db_initialized'] = True
+
+
+# Global error handler to catch unhandled exceptions and log full tracebacks
+@app.errorhandler(500)
+def handle_internal_server_error(e):
+    import traceback
+    tb = traceback.format_exc()
+    try:
+        app.logger.error("Unhandled exception: %s\n%s", e, tb)
+    except Exception:
+        print("[500 error]", e)
+        print(tb)
+    # Return a friendly error page while logging details
+    try:
+        return render_template('500.html', error=str(e)), 500
+    except Exception:
+        return ("Internal Server Error", 500)
 
 # Models
 class Product(db.Model):

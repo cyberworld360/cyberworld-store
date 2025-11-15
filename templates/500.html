@@ -1,0 +1,13 @@
+{% extends 'base.html' %}
+{% block content %}
+<div style="max-width:800px;margin:60px auto;padding:30px;background:#fff;border-radius:8px;border:1px solid #eee;">
+  <h2>Internal Server Error</h2>
+  <p>Sorry — something went wrong on the server. The error has been logged and we are investigating.</p>
+  {% if error %}
+  <details style="white-space:pre-wrap;background:#f9f9f9;padding:10px;border-radius:4px;margin-top:10px;">
+    <summary>Show error details (for debugging)</summary>
+    {{ error }}
+  </details>
+  {% endif %}
+</div>
+{% endblock %}
