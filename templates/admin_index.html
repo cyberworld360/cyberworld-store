@@ -3,14 +3,14 @@
 <div class="admin-container">
   <div class="admin-header">
     <h2>Product Management Dashboard</h2>
-    <div style="display:flex; gap:10px; align-items:center">
+    <div class="admin-header-actions">
       <a class="btn btn-secondary" href="/admin/orders">Orders</a>
       <a class="btn btn-add" href="/admin/new">+ Add New Product</a>
     </div>
   </div>
 
   {% if recent_orders %}
-  <div style="margin:10px 0 20px">
+  <div class="recent-orders">
     <h3>Recent orders</h3>
     <ul>
       {% for o in recent_orders %}
@@ -19,39 +19,97 @@
     </ul>
   </div>
   {% endif %}
-  <div style="margin-bottom:20px">
+  <div class="export-orders">
     <a class="btn btn-secondary" href="{{ url_for('admin_orders_export') }}">Export Orders (CSV)</a>
   </div>
 
   {% if products %}
-    <div class="products-grid">
-      {% for p in products %}
-      <div class="product-card">
-        <div class="product-image">
-          <img src="{{ p.image }}" alt="{{ p.title }}" />
-          {% if p.featured %}
-          <span class="badge-featured">Featured</span>
-          {% endif %}
-        </div>
-        <div class="product-info">
-          <h3>{{ p.title }}</h3>
-          <p class="product-desc">{{ p.short[:80] }}{% if p.short|length > 80 %}...{% endif %}</p>
-          <div class="price-info">
-            <span class="price-current">{{ p.price_ghc|money }}</span>
-            {% if p.old_price_ghc and p.old_price_ghc > p.price_ghc %}
-              <span class="price-old">{{ p.old_price_ghc|money }}</span>
+    {% if dashboard_layout == 'grid' %}
+      <div class="products-grid">
+        {% for p in products %}
+        <div class="product-card">
+          <div class="product-image">
+            <img src="{{ p.image }}" alt="{{ p.title }}" />
+            {% if p.featured %}
+            <span class="badge-featured">Featured</span>
             {% endif %}
           </div>
-          <div class="product-actions">
-            <a class="btn btn-edit" href="/admin/edit/{{ p.id }}">Edit</a>
-            <form action="/admin/delete/{{ p.id }}" method="post" onsubmit="return confirm('Are you sure you want to delete this product?');" style="display:inline">
-              <button class="btn btn-delete" type="submit">Delete</button>
-            </form>
+          <div class="product-info">
+            <h3>{{ p.title }}</h3>
+            <p class="product-desc">{{ p.short[:80] }}{% if p.short|length > 80 %}...{% endif %}</p>
+            <div class="price-info">
+              <span class="price-current">{{ p.price_ghc|money }}</span>
+              {% if p.old_price_ghc and p.old_price_ghc > p.price_ghc %}
+                <span class="price-old">{{ p.old_price_ghc|money }}</span>
+              {% endif %}
+            </div>
+            <div class="product-actions">
+              <a class="btn btn-edit" href="/admin/edit/{{ p.id }}">Edit</a>
+              <form action="/admin/delete/{{ p.id }}" method="post" onsubmit="return confirm('Are you sure you want to delete this product?');" class="inline-form">
+                <button class="btn btn-delete" type="submit">Delete</button>
+              </form>
+            </div>
           </div>
         </div>
+        {% endfor %}
       </div>
-      {% endfor %}
-    </div>
+    {% elif dashboard_layout == 'list' %}
+      <div class="products-list">
+        {% for p in products %}
+        <div class="product-list-item">
+          <div class="product-list-image">
+            <img src="{{ p.image }}" alt="{{ p.title }}" />
+          </div>
+          <div class="product-list-info">
+            <h3>{{ p.title }}</h3>
+            <p class="product-desc">{{ p.short[:120] }}{% if p.short|length > 120 %}...{% endif %}</p>
+            <div class="price-info">
+              <span class="price-current">{{ p.price_ghc|money }}</span>
+              {% if p.old_price_ghc and p.old_price_ghc > p.price_ghc %}
+                <span class="price-old">{{ p.old_price_ghc|money }}</span>
+              {% endif %}
+            </div>
+            <div class="product-actions">
+              <a class="btn btn-edit" href="/admin/edit/{{ p.id }}">Edit</a>
+              <form action="/admin/delete/{{ p.id }}" method="post" onsubmit="return confirm('Are you sure you want to delete this product?');" class="inline-form">
+                <button class="btn btn-delete" type="submit">Delete</button>
+              </form>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    {% elif dashboard_layout == 'compact' %}
+      <div class="products-compact">
+        {% for p in products %}
+        <div class="product-compact-row">
+          <span class="compact-title">{{ p.title }}</span>
+          <span class="compact-price">{{ p.price_ghc|money }}</span>
+          <span class="compact-actions">
+            <a class="btn btn-edit" href="/admin/edit/{{ p.id }}">Edit</a>
+            <form action="/admin/delete/{{ p.id }}" method="post" onsubmit="return confirm('Are you sure you want to delete this product?');" class="inline-form">
+              /* Add CSS for new classes */
+              .admin-header-actions {
+                display: flex;
+                gap: 10px;
+                align-items: center;
+              }
+              .recent-orders {
+                margin: 10px 0 20px;
+              }
+              .export-orders {
+                margin-bottom: 20px;
+              }
+              .inline-form {
+                display: inline;
+              }
+              <button class="btn btn-delete" type="submit">Delete</button>
+            </form>
+          </span>
+        </div>
+        {% endfor %}
+      </div>
+    {% endif %}
   {% else %}
     <div class="no-products">
       <p>No products yet. <a href="/admin/new">Add your first product</a></p>
@@ -99,6 +157,60 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 20px;
+}
+
+.products-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.product-list-item {
+  display: flex;
+  gap: 18px;
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 15px;
+  align-items: center;
+}
+.product-list-image img {
+  width: 120px;
+  height: 120px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+.product-list-info {
+  flex: 1;
+}
+
+.products-compact {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.product-compact-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  background: #f8f8f8;
+  border-radius: 6px;
+  padding: 10px 15px;
+  font-size: 15px;
+}
+.compact-title {
+  flex: 2;
+  font-weight: 600;
+  color: #333;
+}
+.compact-price {
+  flex: 1;
+  color: #28a745;
+  font-weight: bold;
+}
+.compact-actions {
+  flex: 1;
+  display: flex;
+  gap: 8px;
 }
 
 @media (max-width: 768px) {

@@ -2,6 +2,8 @@ import os
 from decimal import Decimal
 from pathlib import Path
 
+from pkg_resources import UnknownExtra
+
 # lightweight .env loader to avoid requiring the external 'python-dotenv' package
 def load_dotenv(path: str = ".env"):
     env_path = Path(path)
@@ -98,8 +100,9 @@ MAIL_USE_SSL = os.environ.get("MAIL_USE_SSL", "false").lower() in ("1", "true", 
 _env_mail_sender = os.environ.get("MAIL_DEFAULT_SENDER", "").strip()
 # Force sender name to 'CYBER WORLD STORE' while allowing custom address via MAIL_USERNAME or MAIL_DEFAULT_SENDER
 sender_email = None
-if os.environ.get("MAIL_USERNAME"):
-    sender_email = os.environ.get("MAIL_USERNAME").strip()
+mail_username_env = os.environ.get("MAIL_USERNAME")
+if mail_username_env:
+    sender_email = mail_username_env.strip()
 elif _env_mail_sender:
     # extract address if user provided a full 'Name <email>' or just email
     if '<' in _env_mail_sender and '>' in _env_mail_sender:
@@ -128,7 +131,7 @@ CURRENCY = "GH\u20B5"  # GH₵
 @app.before_first_request
 def init_db_on_first_request():
     """Initialize database on first request (serverless-friendly)."""
-    if getattr(app, '_db_initialized', False):
+    if app.config.get('_db_initialized', False):
         return
     try:
         with app.app_context():
@@ -140,14 +143,14 @@ def init_db_on_first_request():
                     init_fn()
                 except Exception as e:
                     app.logger.warning("init_db() raised exception: %s", e)
-            app._db_initialized = True
+            app.config['_db_initialized'] = True
     except Exception as e:
         try:
             app.logger.exception("Database initialization failed: %s", e)
         except Exception:
             print(f"[db error] Initialization failed: {e}")
         # Mark as attempted to avoid retry loops
-        app._db_initialized = True
+        app.config['_db_initialized'] = True
 
 # Models
 class Product(db.Model):
@@ -312,6 +315,10 @@ class Settings(db.Model):
     secondary_font = db.Column(db.String(100), default='Verdana, sans-serif')
     primary_color = db.Column(db.String(7), default='#27ae60')
     secondary_color = db.Column(db.String(7), default='#2c3e50')
+    dashboard_layout = db.Column(db.String(20), default='grid')  # 'grid' or 'list'
+    seo_visible = db.Column(db.Boolean, default=True)  # Search engine visibility toggle
+    seo_checklist_done = db.Column(db.Boolean, default=False)  # SEO checklist status
+    site_announcement = db.Column(db.Text, default="")  # Editable announcement text
     updated_at = db.Column(db.DateTime, default=lambda: __import__('datetime').datetime.utcnow(), onupdate=lambda: __import__('datetime').datetime.utcnow())
 
 
@@ -341,6 +348,7 @@ def load_user(user_id):
     except Exception:
         pass
     return None
+
 
 # Utilities
 def allowed_file(fname):
@@ -1656,9 +1664,10 @@ def admin_index():
         return redirect(url_for('index'))
 
     prods = Product.query.order_by(Product.id.desc()).all()
-    # show a few recent orders for quick access
     recent_orders = Order.query.order_by(Order.created_at.desc()).limit(5).all()
-    return render_template('admin_index.html', products=prods, recent_orders=recent_orders)
+    settings = get_settings()
+    dashboard_layout = settings.dashboard_layout if settings and hasattr(settings, 'dashboard_layout') else 'grid'
+    return render_template('admin_index.html', products=prods, recent_orders=recent_orders, dashboard_layout=dashboard_layout)
 
 
 @app.route('/admin/order/<int:oid>/invoice')
@@ -2047,6 +2056,9 @@ def admin_settings():
         settings.secondary_color = request.form.get('secondary_color', settings.secondary_color)
         settings.primary_font = request.form.get('primary_font', settings.primary_font)
         settings.secondary_font = request.form.get('secondary_font', settings.secondary_font)
+
+        # Update dashboard layout setting
+        settings.dashboard_layout = request.form.get('dashboard_layout', settings.dashboard_layout)
         
         # Handle logo upload
         if 'logo_file' in request.files and request.files['logo_file']:
