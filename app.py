@@ -69,7 +69,16 @@ UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "change-me")
-app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{BASE_DIR / 'data.db'}"
+# Use a writable temporary DB path when running on Vercel serverless (VERCEL env var present)
+_env_db = os.environ.get("SQLALCHEMY_DATABASE_URI", "").strip()
+if _env_db:
+    app.config["SQLALCHEMY_DATABASE_URI"] = _env_db
+else:
+    if os.environ.get("VERCEL") or os.environ.get("VERCEL_URL"):
+        # Vercel serverless functions have a writable /tmp directory
+        app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:////tmp/data.db"
+    else:
+        app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{BASE_DIR / 'data.db'}"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["UPLOAD_FOLDER"] = str(UPLOAD_FOLDER)
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024  # 5MB
