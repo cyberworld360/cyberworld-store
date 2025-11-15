@@ -144,7 +144,7 @@ db = SQLAlchemy(app)
 # Flask-Migrate (Alembic) setup
 migrate = Migrate(app, db)
 login_manager = LoginManager(app)
-login_manager.login_view = 'user_login'
+login_manager.login_view = 'user_login'  # type: ignore
 
 CURRENCY = "GH\u20B5"  # GH₵
 
@@ -452,11 +452,31 @@ def allowed_file(fname):
 
 def get_settings():
     """Get site settings, create defaults if not exist"""
-    settings = Settings.query.first()
+    try:
+        settings = Settings.query.first()
+    except Exception as e:
+        # Database schema may be older (missing new Settings columns). Return
+        # a transient Settings object with defaults so templates and login
+        # pages can render without failing. This avoids forcing migrations
+        # at runtime; admin can run `flask db upgrade` or `python -m` init scripts.
+        try:
+            app.logger.warning("Could not query Settings (db schema mismatch): %s", e)
+        except Exception:
+            pass
+        return Settings()
+
     if not settings:
         settings = Settings()
-        db.session.add(settings)
-        db.session.commit()
+        try:
+            db.session.add(settings)
+            db.session.commit()
+        except Exception:
+            # If commit fails (schema), swallow and return transient settings
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
+            return settings
     return settings
 
 @app.template_filter("money")
