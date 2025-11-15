@@ -170,9 +170,9 @@
                             <h3>📝 Site Announcement / Editable Text</h3>
                             <div class="form-group">
                                 <label for="site_announcement">Edit Announcement (Rich Text)</label>
-                                <textarea id="site_announcement" name="site_announcement" rows="6" style="width:100%;font-size:16px;">{{ settings.site_announcement|safe }}</textarea>
+                                <textarea id="site_announcement" name="site_announcement" rows="6" class="announcement-textarea">{{ settings.site_announcement|safe }}</textarea>
                                 <small>Use highlight, color, and formatting tools below:</small>
-                                <div style="margin-top:10px;">
+                                <div class="announcement-toolbar">
                                     <button type="button" onclick="document.execCommand('bold', false, null);">Bold</button>
                                     <button type="button" onclick="document.execCommand('italic', false, null);">Italic</button>
                                     <button type="button" onclick="document.execCommand('underline', false, null);">Underline</button>
@@ -180,7 +180,7 @@
                                     <button type="button" onclick="document.execCommand('foreColor', false, '#27ae60');">Green</button>
                                     <button type="button" onclick="document.execCommand('hiliteColor', false, 'yellow');">Highlight</button>
                                 </div>
-                                <small style="color:gray;">Select text in the box above and click a formatting button.</small>
+                                <small class="announcement-help">Select text in the box above and click a formatting button.</small>
                             </div>
                         </div>
             <!-- Appearance Category -->
@@ -290,8 +290,8 @@
             <div class="settings-section">
                 <h3>📧 Email Settings</h3>
                 <div class="form-group">
-                    <label>Email Sender Name</label>
-                    <input type="text" value="CYBER WORLD STORE" readonly />
+                    <label for="email_sender">Email Sender Name</label>
+                    <input type="text" id="email_sender" value="CYBER WORLD STORE" readonly title="Email sender name" placeholder="CYBER WORLD STORE" />
                     <small>All notification emails are sent from this name.</small>
                 </div>
             </div>
@@ -300,8 +300,18 @@
             <div class="settings-section">
                 <h3>💳 Payment Settings</h3>
                 <div class="form-group">
-                    <label>Paystack Callback URL</label>
-                    <input type="text" value="{{ PAYSTACK_CALLBACK }}" readonly />
+                    <label for="paystack_callback">Paystack Callback URL</label>
+                    <input type="text" id="paystack_callback" value="{{ PAYSTACK_CALLBACK }}" readonly title="Paystack callback URL" placeholder="https://yourdomain.com/paystack/callback" />
+                        .announcement-textarea {
+                            width: 100%;
+                            font-size: 16px;
+                        }
+                        .announcement-toolbar {
+                            margin-top: 10px;
+                        }
+                        .announcement-help {
+                            color: gray;
+                        }
                     <small>Current Paystack callback URL for payment verification.</small>
                 </div>
             </div>
