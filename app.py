@@ -185,10 +185,39 @@ def handle_internal_server_error(e):
         print("[500 error]", e)
         print(tb)
     # Return a friendly error page while logging details
+    # Persist last traceback to a temporary file (serverless writable path)
+    try:
+        last_err_path = '/tmp/last_error.txt'
+        with open(last_err_path, 'w', encoding='utf-8') as fh:
+            fh.write(f"Time: {__import__('datetime').datetime.utcnow().isoformat()}\n")
+            fh.write(str(e) + "\n\n")
+            fh.write(tb)
+    except Exception:
+        try:
+            app.logger.exception('Failed to write last_error file')
+        except Exception:
+            pass
+
     try:
         return render_template('500.html', error=str(e)), 500
     except Exception:
         return ("Internal Server Error", 500)
+
+
+# Secure endpoint to fetch the last saved traceback (protected by ERROR_VIEW_TOKEN env var)
+@app.route('/__last_error')
+def __last_error():
+    token = request.args.get('token') or request.headers.get('X-ERROR-TOKEN')
+    expected = os.environ.get('ERROR_VIEW_TOKEN')
+    if not expected or token != expected:
+        abort(403)
+    last_err_path = '/tmp/last_error.txt'
+    try:
+        with open(last_err_path, 'r', encoding='utf-8') as fh:
+            content = fh.read()
+    except Exception:
+        content = ''
+    return content, 200, {'Content-Type': 'text/plain; charset=utf-8'}
 
 # Models
 class Product(db.Model):
