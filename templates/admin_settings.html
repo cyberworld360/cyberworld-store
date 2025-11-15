@@ -325,7 +325,7 @@
                 </div>
                 <div class="form-group">
                     <label>SEO Checklist</label>
-                    <ul style="list-style:none; padding-left:0;">
+                    <ul class="seo-checklist">
                         <li><label><input type="checkbox" name="site_title" {% if settings.seo_checklist_done %}checked{% endif %}/> Site title and description set</label></li>
                         <li><label><input type="checkbox" name="meta_tags" {% if settings.seo_checklist_done %}checked{% endif %}/> Meta tags present</label></li>
                         <li><label><input type="checkbox" name="robots_txt" {% if settings.seo_checklist_done %}checked{% endif %}/> Robots.txt configured</label></li>
@@ -334,9 +334,22 @@
                         <li><label><input type="checkbox" name="ssl_enabled" {% if settings.seo_checklist_done %}checked{% endif %}/> SSL/HTTPS enabled</label></li>
                     </ul>
                     {% if settings.seo_checklist_done %}
-                    <div class="checklist-status" style="color:green; font-weight:bold;">✔️ All SEO checklist items completed!</div>
+                    <div class="checklist-status checklist-success">✔️ All SEO checklist items completed!</div>
                     {% else %}
-                    <div class="checklist-status" style="color:orange; font-weight:bold;">⚠️ Please complete all SEO checklist items.</div>
+                    <div class="checklist-status checklist-warning">⚠️ Please complete all SEO checklist items.</div>
+                        .seo-checklist {
+                            list-style: none;
+                            padding-left: 0;
+                        }
+                        .checklist-status {
+                            font-weight: bold;
+                        }
+                        .checklist-success {
+                            color: green;
+                        }
+                        .checklist-warning {
+                            color: orange;
+                        }
                     {% endif %}
                 </div>
             </div>

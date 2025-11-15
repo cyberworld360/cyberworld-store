@@ -157,6 +157,8 @@ def init_db_on_first_request():
     try:
         with app.app_context():
             db.create_all()
+            # Ensure Settings table has all expected columns
+            _ensure_settings_columns()
             # Call optional init_db() if defined in this module
             init_fn = globals().get('init_db')
             if callable(init_fn):
@@ -172,6 +174,35 @@ def init_db_on_first_request():
             print(f"[db error] Initialization failed: {e}")
         # Mark as attempted to avoid retry loops
         app.config['_db_initialized'] = True
+
+
+def _ensure_settings_columns():
+    """Add missing Settings columns to the database for backward compatibility."""
+    try:
+        with db.engine.connect() as conn:
+            # Get all column names in settings table
+            res = conn.exec_driver_sql("PRAGMA table_info(settings)")
+            cols = [r[1] for r in res.fetchall()]
+            
+            # List of columns that should exist
+            required_cols = [
+                ('dashboard_layout', "VARCHAR(20) DEFAULT 'grid'"),
+                ('seo_visible', "BOOLEAN DEFAULT 1"),
+                ('seo_checklist_done', "BOOLEAN DEFAULT 0"),
+                ('site_announcement', "TEXT DEFAULT ''")
+            ]
+            
+            # Add missing columns
+            for col_name, col_def in required_cols:
+                if col_name not in cols:
+                    try:
+                        conn.exec_driver_sql(f"ALTER TABLE settings ADD COLUMN {col_name} {col_def}")
+                        print(f"Added missing column 'settings.{col_name}'")
+                    except Exception as e:
+                        print(f"Could not add column {col_name}: {e}")
+    except Exception as e:
+        print(f"Could not ensure Settings columns: {e}")
+
 
 
 # Global error handler to catch unhandled exceptions and log full tracebacks
@@ -873,6 +904,8 @@ def _retry_failed_emails_loop(interval: int = 60, max_attempts: int = 5):
 def initdb_command():
     # Create tables if they don't exist
     db.create_all()
+    # Ensure Settings table has all expected columns
+    _ensure_settings_columns()
     # If the database was created before `card_size` existed on Product, try to add the column.
     try:
         # Inspect product table columns (works for SQLite)
@@ -2259,6 +2292,69 @@ def admin_settings():
             flash(f'Error saving settings: {str(e)}', 'danger')
     
     return render_template('admin_settings.html', settings=settings)
+
+@app.route('/admin/settings/api', methods=['POST'])
+def admin_settings_api():
+    """JSON API endpoint to save admin settings directly (no form complexity).
+
+    Authentication:
+    - If request includes header `X-ADMIN-TOKEN` matching env var `ADMIN_API_TOKEN`, the request is allowed.
+    - Otherwise, a logged-in admin session (Flask-Login) is required.
+    """
+    # Token-based access for non-interactive scripts
+    token = request.headers.get('X-ADMIN-TOKEN') or request.args.get('token')
+    expected_token = os.environ.get('ADMIN_API_TOKEN')
+    if expected_token and token and token == expected_token:
+        authorized = True
+    else:
+        # Fall back to session-based admin check
+        authorized = hasattr(current_user, 'username') and getattr(current_user, 'username', None)
+
+    if not authorized:
+        return jsonify({'status': 'error', 'message': 'Admin access required'}), 403
+
+    settings = get_settings()
+    data = request.get_json() or {}
+
+    try:
+        # Update scalar fields from JSON payload
+        if 'primary_color' in data:
+            settings.primary_color = data.get('primary_color')
+        if 'secondary_color' in data:
+            settings.secondary_color = data.get('secondary_color')
+        if 'primary_font' in data:
+            settings.primary_font = data.get('primary_font')
+        if 'secondary_font' in data:
+            settings.secondary_font = data.get('secondary_font')
+        if 'dashboard_layout' in data:
+            settings.dashboard_layout = data.get('dashboard_layout')
+        if 'seo_visible' in data:
+            settings.seo_visible = bool(data.get('seo_visible'))
+        if 'seo_checklist_done' in data:
+            settings.seo_checklist_done = bool(data.get('seo_checklist_done'))
+        if 'site_announcement' in data:
+            settings.site_announcement = data.get('site_announcement', '')
+
+        settings.updated_at = __import__('datetime').datetime.utcnow()
+        db.session.commit()
+
+        return jsonify({
+            'status': 'success',
+            'message': 'Settings saved successfully',
+            'settings': {
+                'dashboard_layout': settings.dashboard_layout,
+                'seo_visible': settings.seo_visible,
+                'seo_checklist_done': settings.seo_checklist_done,
+                'site_announcement': settings.site_announcement[:100]
+            }
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        try:
+            app.logger.exception('Failed to save settings via API: %s', e)
+        except Exception:
+            pass
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/admin/coupons')
 @login_required
