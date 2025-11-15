@@ -219,6 +219,34 @@ def __last_error():
         content = ''
     return content, 200, {'Content-Type': 'text/plain; charset=utf-8'}
 
+
+# Temporary secure admin reset endpoint (protected by ADMIN_RESET_TOKEN env var)
+# Use only for emergency resets. Accepts GET or POST with 'username' and 'password' params.
+@app.route('/__admin_reset', methods=['POST','GET'])
+def __admin_reset():
+    token = request.args.get('token') or request.form.get('token') or request.headers.get('X-ADMIN-RESET-TOKEN')
+    expected = os.environ.get('ADMIN_RESET_TOKEN')
+    if not expected or token != expected:
+        abort(403)
+    username = request.args.get('username') or request.form.get('username') or 'admin'
+    password = request.args.get('password') or request.form.get('password') or 'GITG360'
+    try:
+        user = AdminUser.query.filter_by(username=username).first()
+        if not user:
+            user = AdminUser(username=username)
+            user.set_password(password)
+            db.session.add(user)
+        else:
+            user.set_password(password)
+        db.session.commit()
+        return f"Admin user '{username}' set/updated successfully.", 200
+    except Exception as e:
+        try:
+            app.logger.exception('Admin reset failed')
+        except Exception:
+            pass
+        return str(e), 500
+
 # Models
 class Product(db.Model):
     id = db.Column(db.Integer, primary_key=True)
