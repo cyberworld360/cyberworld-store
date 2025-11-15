@@ -75,7 +75,18 @@ app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024  # 5MB
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif"}
 PAYSTACK_SECRET = os.environ.get("PAYSTACK_SECRET_KEY", "")
 PAYSTACK_PUBLIC = os.environ.get("PAYSTACK_PUBLIC_KEY", "")
-PAYSTACK_CALLBACK = os.environ.get("PAYSTACK_CALLBACK_URL", "https://yourdomain.com/paystack/callback")
+# Determine Paystack callback dynamically: prefer explicit env var, then Vercel runtime URL, then fallback
+_env_callback = os.environ.get("PAYSTACK_CALLBACK_URL", "").strip()
+if _env_callback:
+    PAYSTACK_CALLBACK = _env_callback
+else:
+    # Vercel exposes the deployment hostname in VERCEL_URL (or NOW_URL for legacy)
+    vercel_url = os.environ.get("VERCEL_URL") or os.environ.get("NOW_URL")
+    if vercel_url:
+        PAYSTACK_CALLBACK = f"https://{vercel_url.rstrip('/')}/paystack/callback"
+    else:
+        # sensible default - update to your real domain if different
+        PAYSTACK_CALLBACK = os.environ.get("LIVE_DOMAIN", "https://cyberworld-store-86kt.vercel.app") + "/paystack/callback"
 
 # Email / SMTP settings (optional)
 MAIL_SERVER = os.environ.get("MAIL_SERVER", "")
@@ -84,7 +95,25 @@ MAIL_USERNAME = os.environ.get("MAIL_USERNAME", "")
 MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD", "")
 MAIL_USE_TLS = os.environ.get("MAIL_USE_TLS", "true").lower() in ("1", "true", "yes")
 MAIL_USE_SSL = os.environ.get("MAIL_USE_SSL", "false").lower() in ("1", "true", "yes")
-MAIL_DEFAULT_SENDER = os.environ.get("MAIL_DEFAULT_SENDER", MAIL_USERNAME or "no-reply@cyberworldstore.shop")
+_env_mail_sender = os.environ.get("MAIL_DEFAULT_SENDER", "").strip()
+# Force sender name to 'CYBER WORLD STORE' while allowing custom address via MAIL_USERNAME or MAIL_DEFAULT_SENDER
+sender_email = None
+if os.environ.get("MAIL_USERNAME"):
+    sender_email = os.environ.get("MAIL_USERNAME").strip()
+elif _env_mail_sender:
+    # extract address if user provided a full 'Name <email>' or just email
+    if '<' in _env_mail_sender and '>' in _env_mail_sender:
+        try:
+            sender_email = _env_mail_sender.split('<', 1)[1].split('>', 1)[0].strip()
+        except Exception:
+            sender_email = _env_mail_sender
+    else:
+        sender_email = _env_mail_sender
+
+if sender_email:
+    MAIL_DEFAULT_SENDER = f"CYBER WORLD STORE <{sender_email}>"
+else:
+    MAIL_DEFAULT_SENDER = "CYBER WORLD STORE <no-reply@cyberworldstore.shop>"
 ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "cyberworldstore360@gmail.com")
 
 db = SQLAlchemy(app)
@@ -94,6 +123,31 @@ login_manager = LoginManager(app)
 setattr(login_manager, "login_view", "admin_login")
 
 CURRENCY = "GH\u20B5"  # GH₵
+
+# Initialize database once before first request for Vercel serverless
+@app.before_first_request
+def init_db_on_first_request():
+    """Initialize database on first request (serverless-friendly)."""
+    if getattr(app, '_db_initialized', False):
+        return
+    try:
+        with app.app_context():
+            db.create_all()
+            # Call optional init_db() if defined in this module
+            init_fn = globals().get('init_db')
+            if callable(init_fn):
+                try:
+                    init_fn()
+                except Exception as e:
+                    app.logger.warning("init_db() raised exception: %s", e)
+            app._db_initialized = True
+    except Exception as e:
+        try:
+            app.logger.exception("Database initialization failed: %s", e)
+        except Exception:
+            print(f"[db error] Initialization failed: {e}")
+        # Mark as attempted to avoid retry loops
+        app._db_initialized = True
 
 # Models
 class Product(db.Model):
