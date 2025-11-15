@@ -144,7 +144,7 @@ db = SQLAlchemy(app)
 # Flask-Migrate (Alembic) setup
 migrate = Migrate(app, db)
 login_manager = LoginManager(app)
-setattr(login_manager, "login_view", "admin_login")
+login_manager.login_view = 'user_login'
 
 CURRENCY = "GH\u20B5"  # GH₵
 
@@ -233,7 +233,8 @@ def __admin_reset():
     try:
         user = AdminUser.query.filter_by(username=username).first()
         if not user:
-            user = AdminUser(username=username)
+            user = AdminUser()
+            user.username = username
             user.set_password(password)
             db.session.add(user)
         else:
@@ -529,9 +530,17 @@ def _send_via_sendgrid(to_address: str, subject: str, body: str, html_body = Non
     """Send email using SendGrid V3 API. Returns True on accepted (202)."""
     if not SENDGRID_API_KEY:
         return False
+
+    # Ensure we send a valid email-only address to SendGrid in the `from` field.
+    from_name, from_addr = parseaddr(MAIL_DEFAULT_SENDER or '')
+    if not from_addr:
+        # fallback to configured username or admin email
+        from_addr = MAIL_USERNAME or ADMIN_EMAIL or 'no-reply@cyberworldstore.shop'
+        from_name = 'CYBER WORLD STORE'
+
     payload = {
         "personalizations": [{"to": [{"email": to_address}], "subject": subject}],
-        "from": {"email": MAIL_DEFAULT_SENDER},
+        "from": {"email": from_addr, "name": (from_name or 'CYBER WORLD STORE')},
         "content": [{"type": "text/plain", "value": body}],
     }
     if html_body:
@@ -2154,6 +2163,12 @@ def admin_settings():
 
         # Update dashboard layout setting
         settings.dashboard_layout = request.form.get('dashboard_layout', settings.dashboard_layout)
+        # SEO visibility and checklist
+        settings.seo_visible = bool(request.form.get('seo_visible'))
+        settings.seo_checklist_done = bool(request.form.get('seo_checklist_done'))
+        # Announcement / rich text (HTML allowed)
+        if request.form.get('site_announcement') is not None:
+            settings.site_announcement = request.form.get('site_announcement')
         
         # Handle logo upload
         if 'logo_file' in request.files and request.files['logo_file']:

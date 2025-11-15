@@ -18,6 +18,20 @@ body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial; margin:
 .btn-danger { background:#c0392b; color:#fff; padding:.4rem .8rem; border-radius:6px; }
 .product-detail { display:flex; gap:1rem; align-items:flex-start; }
 .product-detail img { max-width: 360px; width:100%; border-radius:6px; }
+
+/* Responsive adjustments: stack product details on small screens */
+@media (max-width: 780px) {
+  .product-detail { flex-direction: column; }
+  .product-detail img { max-width: 100%; height: auto; }
+  .container { padding: .75rem; }
+}
+
+/* Ensure product cards shrink gracefully on very small displays */
+@media (max-width: 420px) {
+  .card img { height: 120px; }
+  .card h4 { font-size: 1rem; }
+}
+
 .flash-list { margin: .5rem 0; }
 .flash { padding: .5rem; border-radius:6px; margin-bottom:.5rem; }
 .flash.success { background:#e6ffed; border:1px solid #b6f0c4; }
