@@ -66,6 +66,7 @@ with app.app_context():
     
     # Test 3: Build customer email
     print("\n[TEST 3] Building customer order confirmation email...")
+    html_cust = None
     try:
         html_cust = '<html><body style="font-family:Arial,sans-serif; line-height:1.6; color:#333;">'
         html_cust += build_email_header_html("Order Confirmation - Test")
@@ -83,10 +84,11 @@ with app.app_context():
         print(f"  Contains: header, items table, summary, footer")
     except Exception as e:
         print(f"  ❌ Failed to build customer email: {e}")
-    
     # Test 4: Build admin email
     print("\n[TEST 4] Building admin notification email...")
+    html_admin = None
     try:
+        html_admin = '<html><body style="font-family:Arial,sans-serif; line-height:1.6; color:#333;">'
         html_admin = '<html><body style="font-family:Arial,sans-serif; line-height:1.6; color:#333;">'
         html_admin += build_email_header_html("New Test Order Received")
         html_admin += '<div style="max-width:600px; margin:0 auto; padding:20px;">'
@@ -112,28 +114,34 @@ with app.app_context():
     # Test 6: Test sending emails
     print("\n[TEST 6] Testing email send functions...")
     print(f"  Note: These will send if SMTP is properly configured.")
-    print(f"  Current ADMIN_EMAIL: {ADMIN_EMAIL}")
-    
     try:
         # This will actually attempt to send if credentials are valid
-        result_customer = send_html_email_async(
-            customer_email,
-            "[TEST] Order Confirmation",
-            html_cust,
-            f"Order {order_ref} - Test email"
-        )
-        print(f"  Customer email async send: {'✅ Queued' if result_customer else '❌ Failed'}")
+        if html_cust:
+            result_customer = send_html_email_async(
+                customer_email,
+                "[TEST] Order Confirmation",
+                html_cust,
+                f"Order {order_ref} - Test email"
+            )
+            print(f"  Customer email async send: {'✅ Queued' if result_customer else '❌ Failed'}")
+        else:
+            print(f"  Customer email async send: ⏭️  Skipped (email not built)")
     except Exception as e:
         print(f"  ❌ Customer email error: {e}")
     
     try:
-        result_admin = send_html_email_async(
-            ADMIN_EMAIL,
-            "[TEST] New Order Notification",
-            html_admin,
-            f"New order {order_ref} - Test notification"
-        )
-        print(f"  Admin email async send: {'✅ Queued' if result_admin else '❌ Failed'}")
+        if html_admin:
+            result_admin = send_html_email_async(
+                ADMIN_EMAIL,
+                "[TEST] New Order Notification",
+                html_admin,
+                f"New order {order_ref} - Test notification"
+            )
+            print(f"  Admin email async send: {'✅ Queued' if result_admin else '❌ Failed'}")
+        else:
+            print(f"  Admin email async send: ⏭️  Skipped (email not built)")
+    except Exception as e:
+        print(f"  ❌ Admin email error: {e}")
     except Exception as e:
         print(f"  ❌ Admin email error: {e}")
 

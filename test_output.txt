@@ -1,0 +1,19 @@
+C:\Users\CYBER360\Desktop\cyberworld_paystack_clone_final\app.py:5: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  from pkg_resources import UnknownExtra
+'FLASK_ENV' is deprecated and will not be used in Flask 2.3. Use 'FLASK_DEBUG' instead.
+=== Testing GET /admin/settings/api ===
+Status: 200
+Response: {'settings': {'banner1_image': '/static/images/ads1.svg', 'banner2_image': '/static/images/banner2_1762920851_5515.jpg_wh1200.jpg', 'bg_image': '/static/images/bg_1762920851_f97bb54f47cb8b8e8bfe5f3a91c0b49a.jpg', 'dashboard_layout': 'grid', 'logo_image': '/static/images/logo_1762941854_IMG-20250807-WA0002.jpg', 'primary_color': '#27ae60', 'primary_font': 'Princetown', 'secondary_color': '#d4bf35', 'secondary_font': 'Verdana, sans-serif', 'seo_checklist_done': False, 'seo_visible': True, 'site_announcement': 'Test announcement from local client', 'updated_at': '2025-11-16T01:00:30.341623'}, 'status': 'success'}
+
+=== Testing POST /admin/settings/api ===
+Status: 200
+Response: {'message': 'Settings saved successfully', 'settings': {'dashboard_layout': 'grid', 'seo_checklist_done': False, 'seo_visible': True, 'site_announcement': 'Test announcement from local client'}, 'status': 'success'}
+
+=== Verify settings were saved (GET again) ===
+Status: 200
+Response: {'settings': {'banner1_image': '/static/images/ads1.svg', 'banner2_image': '/static/images/banner2_1762920851_5515.jpg_wh1200.jpg', 'bg_image': '/static/images/bg_1762920851_f97bb54f47cb8b8e8bfe5f3a91c0b49a.jpg', 'dashboard_layout': 'grid', 'logo_image': '/static/images/logo_1762941854_IMG-20250807-WA0002.jpg', 'primary_color': '#27ae60', 'primary_font': 'Princetown', 'secondary_color': '#d4bf35', 'secondary_font': 'Verdana, sans-serif', 'seo_checklist_done': False, 'seo_visible': True, 'site_announcement': 'Test announcement from local client', 'updated_at': '2025-11-16T01:00:55.885911'}, 'status': 'success'}
+
+Verification:
+  dashboard_layout: grid (expected: grid)
+  seo_visible: True (expected: True)
+  site_announcement: Test announcement from local client (expected: Test announcement...)

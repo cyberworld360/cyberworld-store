@@ -51,7 +51,8 @@ r3 = s.get(SETTINGS, timeout=15)
 if r3.status_code == 200:
     soup2 = BeautifulSoup(r3.text, 'html.parser')
     sel = soup2.find('select', {'id': 'dashboard_layout'})
-    layout = sel.find('option', selected=True).get('value') if sel else None
+    opt = sel.find('option', selected=True) if sel else None
+    layout = opt.get('value') if opt else None
     seo_visible = bool(soup2.find('input', {'id': 'seo_visible', 'checked': True}))
     area = soup2.find('textarea', {'id': 'site_announcement'})
     announcement = (area.text.strip() if area else '')[:60]
