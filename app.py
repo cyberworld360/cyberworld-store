@@ -163,6 +163,20 @@ def init_db_on_first_request():
             db.create_all()
             # Ensure Settings table has all expected columns
             _ensure_settings_columns()
+            # Ensure default admin user exists
+            if not AdminUser.query.filter_by(username="Cyberjnr").first():
+                try:
+                    admin = AdminUser()
+                    admin.username = "Cyberjnr"
+                    admin.set_password("GITG360$")
+                    db.session.add(admin)
+                    db.session.commit()
+                    app.logger.info("Created default admin user: Cyberjnr")
+                except Exception as e:
+                    try:
+                        app.logger.exception("Failed to create default admin: %s", e)
+                    except Exception:
+                        print(f"[db init] Failed to create default admin: {e}")
             # Call optional init_db() if defined in this module
             init_fn = globals().get('init_db')
             if callable(init_fn):
