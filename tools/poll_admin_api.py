@@ -27,25 +27,26 @@ payload = {
 
 headers = {'Content-Type': 'application/json', 'X-ADMIN-TOKEN': args.token}
 
-for i in range(1, args.attempts + 1):
-    print(f'Attempt {i}/{args.attempts} -> POST {args.url}')
-    try:
-        r = requests.post(args.url, headers=headers, json=payload, timeout=20)
-        print('Status:', r.status_code)
-        # Try to print JSON (safe)
+if __name__ == '__main__':
+    for i in range(1, args.attempts + 1):
+        print(f'Attempt {i}/{args.attempts} -> POST {args.url}')
         try:
-            print(json.dumps(r.json(), indent=2))
-        except Exception:
-            print(r.text[:2000])
-        if r.status_code == 200:
-            print('Success on attempt', i)
-            sys.exit(0)
-    except Exception as e:
-        print('Request failed:', e)
+            r = requests.post(args.url, headers=headers, json=payload, timeout=20)
+            print('Status:', r.status_code)
+            # Try to print JSON (safe)
+            try:
+                print(json.dumps(r.json(), indent=2))
+            except Exception:
+                print(r.text[:2000])
+            if r.status_code == 200:
+                print('Success on attempt', i)
+                sys.exit(0)
+        except Exception as e:
+            print('Request failed:', e)
 
-    if i < args.attempts:
-        print(f'Waiting {args.interval} seconds before next attempt...')
-        time.sleep(args.interval)
+        if i < args.attempts:
+            print(f'Waiting {args.interval} seconds before next attempt...')
+            time.sleep(args.interval)
 
-print('All attempts exhausted, API not available or returning non-200 status')
-sys.exit(2)
+    print('All attempts exhausted, API not available or returning non-200 status')
+    sys.exit(2)

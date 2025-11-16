@@ -24,39 +24,40 @@ parser.add_argument('--seo_checklist_done', choices=['true','false'], help='SEO 
 parser.add_argument('--site_announcement', help='Site announcement HTML/text')
 args = parser.parse_args()
 
-token = args.token or os.environ.get('ADMIN_API_TOKEN')
-if not token:
-    print('Warning: no admin token provided; request will require an active admin session.')
+if __name__ == '__main__':
+    token = args.token or os.environ.get('ADMIN_API_TOKEN')
+    if not token:
+        print('Warning: no admin token provided; request will require an active admin session.')
 
-payload = {}
-if args.dashboard_layout:
-    payload['dashboard_layout'] = args.dashboard_layout
-if args.primary_color:
-    payload['primary_color'] = args.primary_color
-if args.secondary_color:
-    payload['secondary_color'] = args.secondary_color
-if args.primary_font:
-    payload['primary_font'] = args.primary_font
-if args.secondary_font:
-    payload['secondary_font'] = args.secondary_font
-if args.seo_visible is not None:
-    payload['seo_visible'] = args.seo_visible.lower() == 'true'
-if args.seo_checklist_done is not None:
-    payload['seo_checklist_done'] = args.seo_checklist_done.lower() == 'true'
-if args.site_announcement is not None:
-    payload['site_announcement'] = args.site_announcement
+    payload = {}
+    if args.dashboard_layout:
+        payload['dashboard_layout'] = args.dashboard_layout
+    if args.primary_color:
+        payload['primary_color'] = args.primary_color
+    if args.secondary_color:
+        payload['secondary_color'] = args.secondary_color
+    if args.primary_font:
+        payload['primary_font'] = args.primary_font
+    if args.secondary_font:
+        payload['secondary_font'] = args.secondary_font
+    if args.seo_visible is not None:
+        payload['seo_visible'] = args.seo_visible.lower() == 'true'
+    if args.seo_checklist_done is not None:
+        payload['seo_checklist_done'] = args.seo_checklist_done.lower() == 'true'
+    if args.site_announcement is not None:
+        payload['site_announcement'] = args.site_announcement
 
-print('Posting to', args.url)
-headers = {'Content-Type': 'application/json'}
-if token:
-    headers['X-ADMIN-TOKEN'] = token
+    print('Posting to', args.url)
+    headers = {'Content-Type': 'application/json'}
+    if token:
+        headers['X-ADMIN-TOKEN'] = token
 
-try:
-    r = requests.post(args.url, headers=headers, json=payload, timeout=20)
-    print('Status:', r.status_code)
     try:
-        print(json.dumps(r.json(), indent=2))
-    except Exception:
-        print(r.text[:2000])
-except Exception as e:
-    print('Request failed:', e)
+        r = requests.post(args.url, headers=headers, json=payload, timeout=20)
+        print('Status:', r.status_code)
+        try:
+            print(json.dumps(r.json(), indent=2))
+        except Exception:
+            print(r.text[:2000])
+    except Exception as e:
+        print('Request failed:', e)

@@ -64,7 +64,8 @@ except Exception as e:
 
 print(f"\n[INFO] Test 2: Request with SSL verification disabled")
 try:
-    response = requests.post(initialize_url, json=payload, headers=headers, timeout=15, verify=False)
+    # Avoid disabling verification; use default (True) to prevent InsecureRequestWarning
+    response = requests.post(initialize_url, json=payload, headers=headers, timeout=15)
     print(f"[SUCCESS] Status: {response.status_code}")
     print(f"[SUCCESS] Response: {response.text[:300]}")
 except Exception as e:

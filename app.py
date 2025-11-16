@@ -1,8 +1,7 @@
 import os
 from decimal import Decimal
 from pathlib import Path
-
-from pkg_resources import UnknownExtra
+from datetime import datetime, timezone
 
 # lightweight .env loader to avoid requiring the external 'python-dotenv' package
 def load_dotenv(path: str = ".env"):
@@ -68,6 +67,11 @@ load_dotenv()
 BASE_DIR = Path(__file__).parent
 UPLOAD_FOLDER = BASE_DIR / "static" / "images"
 UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
+
+# Helper function for timezone-aware UTC datetime
+def utc_now():
+    """Return current UTC time as timezone-aware datetime"""
+    return datetime.now(timezone.utc)
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "change-me")
@@ -220,7 +224,7 @@ def handle_internal_server_error(e):
     try:
         last_err_path = '/tmp/last_error.txt'
         with open(last_err_path, 'w', encoding='utf-8') as fh:
-            fh.write(f"Time: {__import__('datetime').datetime.utcnow().isoformat()}\n")
+            fh.write(f"Time: {utc_now().isoformat()}\n")
             fh.write(str(e) + "\n\n")
             fh.write(tb)
     except Exception:
@@ -334,8 +338,8 @@ class Wallet(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     balance = db.Column(db.Numeric(10, 2), default=0.0, nullable=False)
-    created_at = db.Column(db.DateTime, default=lambda: __import__('datetime').datetime.utcnow())
-    updated_at = db.Column(db.DateTime, default=lambda: __import__('datetime').datetime.utcnow(), onupdate=lambda: __import__('datetime').datetime.utcnow())
+    created_at = db.Column(db.DateTime, default=utc_now)
+    updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now)
 
 
 class Order(db.Model):
@@ -354,7 +358,7 @@ class Order(db.Model):
     payment_method = db.Column(db.String(20), default='unknown')  # wallet, paystack, unknown
     payment_reference = db.Column(db.String(200), nullable=True)
     paid = db.Column(db.Boolean, default=False)
-    created_at = db.Column(db.DateTime, default=lambda: __import__('datetime').datetime.utcnow())
+    created_at = db.Column(db.DateTime, default=utc_now)
 
 
 class OrderItem(db.Model):
@@ -376,7 +380,7 @@ class OrderLog(db.Model):
     old_status = db.Column(db.String(20))
     new_status = db.Column(db.String(20))
     note = db.Column(db.String(500))
-    created_at = db.Column(db.DateTime, default=lambda: __import__('datetime').datetime.utcnow())
+    created_at = db.Column(db.DateTime, default=utc_now)
 
 
 class Slider(db.Model):
@@ -388,7 +392,7 @@ class Slider(db.Model):
     products = db.relationship('Product', secondary='slider_product', backref='sliders')
     display_order = db.Column(db.Integer, default=0)
     is_active = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=lambda: __import__('datetime').datetime.utcnow())
+    created_at = db.Column(db.DateTime, default=utc_now)
 
 slider_product = db.Table('slider_product',
     db.Column('slider_id', db.Integer, db.ForeignKey('slider.id'), primary_key=True),
@@ -407,7 +411,7 @@ class Coupon(db.Model):
     max_discount = db.Column(db.Numeric(10, 2), default=None)  # Max discount cap for percent
     expiry_date = db.Column(db.DateTime, default=None)  # None = no expiry
     is_active = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=lambda: __import__('datetime').datetime.utcnow())
+    created_at = db.Column(db.DateTime, default=utc_now)
     # note: `card_size` belongs to Product (card display size), not Coupon
 
     def is_valid(self):
@@ -416,7 +420,7 @@ class Coupon(db.Model):
             return False, "Coupon is inactive"
         if self.max_uses and self.current_uses >= self.max_uses:
             return False, "Coupon usage limit reached"
-        if self.expiry_date and __import__('datetime').datetime.utcnow() > self.expiry_date:
+        if self.expiry_date and utc_now() > self.expiry_date:
             return False, "Coupon has expired"
         return True, "Valid"
     
@@ -446,7 +450,7 @@ class Settings(db.Model):
     seo_visible = db.Column(db.Boolean, default=True)  # Search engine visibility toggle
     seo_checklist_done = db.Column(db.Boolean, default=False)  # SEO checklist status
     site_announcement = db.Column(db.Text, default="")  # Editable announcement text
-    updated_at = db.Column(db.DateTime, default=lambda: __import__('datetime').datetime.utcnow(), onupdate=lambda: __import__('datetime').datetime.utcnow())
+    updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now)
 
 
 class FailedEmail(db.Model):
@@ -457,7 +461,7 @@ class FailedEmail(db.Model):
     body = db.Column(db.Text, nullable=False)
     attempts = db.Column(db.Integer, default=0)
     last_attempt_at = db.Column(db.DateTime, default=None)
-    created_at = db.Column(db.DateTime, default=lambda: __import__('datetime').datetime.utcnow())
+    created_at = db.Column(db.DateTime, default=utc_now)
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -519,9 +523,8 @@ def money_filter(value):
 
 @app.context_processor
 def inject_now():
-    from datetime import datetime
     settings = get_settings()
-    return {"now": datetime.utcnow(), "PAYSTACK_PUBLIC": PAYSTACK_PUBLIC, "settings": settings}
+    return {"now": utc_now(), "PAYSTACK_PUBLIC": PAYSTACK_PUBLIC, "settings": settings}
 
 
 def send_email(to_address: str, subject: str, body: str):
@@ -884,7 +887,7 @@ def _retry_failed_emails_loop(interval: int = 60, max_attempts: int = 5):
                                 print(f"[email retry] sent id={fe.id} to {fe.to_address}")
                         else:
                             fe.attempts = (fe.attempts or 0) + 1
-                            fe.last_attempt_at = __import__('datetime').datetime.utcnow()
+                            fe.last_attempt_at = utc_now()
                             db.session.commit()
                     except Exception:
                         db.session.rollback()
@@ -2284,7 +2287,7 @@ def admin_settings():
                     flash(f'Background upload failed: {str(e)}', 'warning')
         
         try:
-            settings.updated_at = __import__('datetime').datetime.utcnow()
+            settings.updated_at = utc_now()
             db.session.commit()
             flash('Settings saved successfully!', 'success')
         except Exception as e:
@@ -2358,7 +2361,7 @@ def admin_settings_api():
         if 'site_announcement' in data:
             settings.site_announcement = data.get('site_announcement', '')
 
-        settings.updated_at = __import__('datetime').datetime.utcnow()
+        settings.updated_at = utc_now()
         db.session.commit()
 
         return jsonify({

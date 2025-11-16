@@ -142,13 +142,17 @@ def test_paystack_flow():
             
         except Exception as e:
             print(f"✗ Order creation failed: {e}")
-            return False
+            raise
         
         print("\n" + "="*70)
         print("✅ ALL PAYSTACK FLOW TESTS PASSED")
         print("="*70 + "\n")
-        return True
 
 if __name__ == '__main__':
-    success = test_paystack_flow()
-    sys.exit(0 if success else 1)
+    try:
+        test_paystack_flow()
+    except Exception:
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+    sys.exit(0)

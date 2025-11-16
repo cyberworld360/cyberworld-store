@@ -26,10 +26,10 @@ def test_admin_email():
             print(f"   Status: {data.get('message')}")
         else:
             print(f"❌ Failed with status {response.status_code}")
-        return response.status_code == 200
+        assert response.status_code == 200, f"Expected 200 but got {response.status_code}"
     except Exception as e:
         print(f"❌ Error: {e}")
-        return False
+        raise
 
 def test_email_config():
     """Test basic app connectivity"""
@@ -40,13 +40,12 @@ def test_email_config():
         response = requests.get(f"{BASE_URL}/", timeout=5)
         if response.status_code == 200:
             print("✅ App is running and accessible")
-            return True
         else:
             print(f"❌ App returned status {response.status_code}")
-            return False
+        assert response.status_code == 200, f"Expected 200 but got {response.status_code}"
     except Exception as e:
         print(f"❌ Cannot connect to app: {e}")
-        return False
+        raise
 
 def main():
     print("\n" + "="*70)
@@ -56,13 +55,19 @@ def main():
     print(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}")
     
     # Check connectivity first
-    if not test_email_config():
-        print("\n❌ Cannot reach the server. Make sure Flask is running:")
+    try:
+        test_email_config()
+    except AssertionError as e:
+        print("\n❌ Cannot reach the server or check failed. Make sure Flask is running:")
         print("   .venv\\Scripts\\python.exe run.py")
         return
-    
+
     # Test admin email
-    admin_ok = test_admin_email()
+    try:
+        test_admin_email()
+    except AssertionError as e:
+        print("\n❌ Admin email test failed:", e)
+        # continue to summary
     
     print("\n" + "="*70)
     print(" TEST SUMMARY")
