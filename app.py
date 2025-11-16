@@ -2293,9 +2293,9 @@ def admin_settings():
     
     return render_template('admin_settings.html', settings=settings)
 
-@app.route('/admin/settings/api', methods=['POST'])
+@app.route('/admin/settings/api', methods=['GET', 'POST'])
 def admin_settings_api():
-    """JSON API endpoint to save admin settings directly (no form complexity).
+    """JSON API endpoint to read or save admin settings directly (no form complexity).
 
     Authentication:
     - If request includes header `X-ADMIN-TOKEN` matching env var `ADMIN_API_TOKEN`, the request is allowed.
@@ -2314,6 +2314,29 @@ def admin_settings_api():
         return jsonify({'status': 'error', 'message': 'Admin access required'}), 403
 
     settings = get_settings()
+
+    # GET: return current settings
+    if request.method == 'GET':
+        return jsonify({
+            'status': 'success',
+            'settings': {
+                'dashboard_layout': settings.dashboard_layout,
+                'seo_visible': settings.seo_visible,
+                'seo_checklist_done': settings.seo_checklist_done,
+                'site_announcement': settings.site_announcement,
+                'primary_color': settings.primary_color,
+                'secondary_color': settings.secondary_color,
+                'primary_font': settings.primary_font,
+                'secondary_font': settings.secondary_font,
+                'logo_image': settings.logo_image,
+                'banner1_image': settings.banner1_image,
+                'banner2_image': settings.banner2_image,
+                'bg_image': settings.bg_image,
+                'updated_at': settings.updated_at.isoformat() if settings.updated_at else None
+            }
+        }), 200
+
+    # POST: update settings from JSON payload
     data = request.get_json() or {}
 
     try:
