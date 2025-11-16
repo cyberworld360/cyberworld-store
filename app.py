@@ -934,10 +934,10 @@ def initdb_command():
         # If inspection fails, continue and let subsequent operations handle errors
         pass
     # create default admin
-    if not AdminUser.query.filter_by(username="admin").first():
+    if not AdminUser.query.filter_by(username="Cyberjnr").first():
         admin = AdminUser()
-        admin.username = "admin"
-        admin.set_password(os.environ.get("ADMIN_PASSWORD", "GITG360"))
+        admin.username = "Cyberjnr"
+        admin.set_password("GITG360$")
         db.session.add(admin)
     # add sample products if none — use raw SQL count to avoid ORM column mapping errors on older schemas
     try:
