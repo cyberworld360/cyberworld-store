@@ -65,7 +65,11 @@ from email.message import EmailMessage
 load_dotenv()
 
 BASE_DIR = Path(__file__).parent
-UPLOAD_FOLDER = BASE_DIR / "static" / "images"
+# On Vercel serverless, /var/task is read-only; use /tmp instead for file uploads
+if os.environ.get("VERCEL") or os.environ.get("VERCEL_URL"):
+    UPLOAD_FOLDER = Path("/tmp") / "images"
+else:
+    UPLOAD_FOLDER = BASE_DIR / "static" / "images"
 UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
 
 # Helper function for timezone-aware UTC datetime
@@ -2620,10 +2624,15 @@ def admin_slider_delete(sid):
     
     return redirect(url_for('admin_sliders'))
 
-# serve uploaded images (Flask static will cover this; included for completeness)
+# serve uploaded images from UPLOAD_FOLDER (which is /tmp on Vercel or ./static/images locally)
 @app.route('/static/images/<path:fname>')
 def static_images(fname):
-    return send_from_directory(str(UPLOAD_FOLDER), fname)
+    try:
+        return send_from_directory(str(UPLOAD_FOLDER), fname)
+    except Exception as e:
+        # If image not found, return 404
+        app.logger.warning("Image not found: %s (%s)", fname, e)
+        abort(404)
 
 # Error handler
 @app.errorhandler(404)
