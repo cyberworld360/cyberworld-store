@@ -211,7 +211,17 @@ def _ensure_settings_columns():
                 ('dashboard_layout', "VARCHAR(20) DEFAULT 'grid'"),
                 ('seo_visible', "BOOLEAN DEFAULT 1"),
                 ('seo_checklist_done', "BOOLEAN DEFAULT 0"),
-                ('site_announcement', "TEXT DEFAULT ''")
+                ('site_announcement', "TEXT DEFAULT ''"),
+                # Image BLOB columns for persistent storage
+                ('logo_image_data', 'BLOB'),
+                ('banner1_image_data', 'BLOB'),
+                ('banner2_image_data', 'BLOB'),
+                ('bg_image_data', 'BLOB'),
+                # MIME type columns
+                ("logo_image_mime", "VARCHAR(100) DEFAULT 'image/svg+xml'"),
+                ("banner1_image_mime", "VARCHAR(100) DEFAULT 'image/svg+xml'"),
+                ("banner2_image_mime", "VARCHAR(100) DEFAULT 'image/svg+xml'"),
+                ("bg_image_mime", "VARCHAR(100) DEFAULT 'image/svg+xml'"),
             ]
             
             # Add missing columns
