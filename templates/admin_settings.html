@@ -198,6 +198,11 @@
         margin-top: 8px;
         display: block;
     }
+    /* SEO checklist styles */
+    .seo-checklist { list-style: none; padding-left: 0; }
+    .checklist-status { font-weight: bold; }
+    .checklist-success { color: green; }
+    .checklist-warning { color: orange; }
     @media (max-width: 768px) {
         .settings-grid {
             grid-template-columns: 1fr;
@@ -371,19 +376,6 @@
                     <div class="checklist-status checklist-success">✔️ All SEO checklist items completed!</div>
                     {% else %}
                     <div class="checklist-status checklist-warning">⚠️ Please complete all SEO checklist items.</div>
-                        .seo-checklist {
-                            list-style: none;
-                            padding-left: 0;
-                        }
-                        .checklist-status {
-                            font-weight: bold;
-                        }
-                        .checklist-success {
-                            color: green;
-                        }
-                        .checklist-warning {
-                            color: orange;
-                        }
                     {% endif %}
                 </div>
             </div>

@@ -568,6 +568,47 @@ def decode_image_from_base64(b64_data, mime_type='image/jpeg'):
         b64_str = b64_data
     return f"data:{mime_type};base64,{b64_str}"
 
+
+def is_s3_configured():
+    """Return True if AWS S3 env vars are present to enable S3 uploads."""
+    return bool(os.environ.get('AWS_S3_BUCKET') and os.environ.get('AWS_ACCESS_KEY_ID') and os.environ.get('AWS_SECRET_ACCESS_KEY'))
+
+
+def upload_to_s3(file_obj, key, mime_type=None):
+    """Upload file-like object to S3 and return the public URL. Returns None on failure.
+
+    Expects env vars: AWS_S3_BUCKET, AWS_REGION (optional). Uses boto3 if installed.
+    """
+    try:
+        import boto3
+        bucket = os.environ.get('AWS_S3_BUCKET')
+        region = os.environ.get('AWS_REGION') or None
+        # Build client using env creds
+        s3 = boto3.client('s3',
+                          aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
+                          aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'),
+                          region_name=region)
+        # Prepare body
+        file_obj.seek(0)
+        body = file_obj.read()
+        extra_args = {}
+        if mime_type:
+            extra_args['ContentType'] = mime_type
+        # Use a reasonably unique key
+        s3.put_object(Bucket=bucket, Key=key, Body=body, ACL='public-read', **extra_args)
+        # Construct public URL (standard S3 URL)
+        if region and region != 'us-east-1':
+            url = f"https://{bucket}.s3.{region}.amazonaws.com/{key}"
+        else:
+            url = f"https://{bucket}.s3.amazonaws.com/{key}"
+        return url
+    except Exception as e:
+        try:
+            app.logger.warning('S3 upload failed: %s', e)
+        except Exception:
+            pass
+        return None
+
 def get_settings():
     """Get site settings, create defaults if not exist"""
     try:
@@ -2304,65 +2345,132 @@ def admin_settings():
         settings.dashboard_layout = request.form.get('dashboard_layout', settings.dashboard_layout)
         # SEO visibility and checklist
         settings.seo_visible = bool(request.form.get('seo_visible'))
-        settings.seo_checklist_done = bool(request.form.get('seo_checklist_done'))
+        # Determine SEO checklist completion from individual boxes
+        seo_items = ['site_title','meta_tags','robots_txt','mobile_friendly','page_speed','ssl_enabled']
+        try:
+            settings.seo_checklist_done = all(bool(request.form.get(item)) for item in seo_items)
+        except Exception:
+            settings.seo_checklist_done = False
         # Announcement / rich text (HTML allowed)
         if request.form.get('site_announcement') is not None:
             settings.site_announcement = request.form.get('site_announcement')
         
-        # Handle logo upload (store as base64 in DB for persistence on Vercel)
+        # Handle logo upload (prefer S3 if configured, otherwise store as base64 in DB)
         if 'logo_file' in request.files and request.files['logo_file']:
             file = request.files['logo_file']
             if file and file.filename and allowed_file(file.filename):
                 try:
                     mime_type = get_mime_type(file.filename)
-                    b64_data = encode_image_to_base64(file)
-                    settings.logo_image_data = b64_data
-                    settings.logo_image_mime = mime_type
-                    # Keep the filename reference for backward compatibility
-                    settings.logo_image = f"/database/logo_from_{secure_filename(file.filename)}"
-                    flash('Logo updated successfully!', 'success')
+                    # Try S3 first
+                    if is_s3_configured():
+                        key = f"logo_{int(time.time())}_{secure_filename(file.filename)}"
+                        url = upload_to_s3(file, key, mime_type=mime_type)
+                        if url:
+                            settings.logo_image = url
+                            # Clear DB-stored binary if present
+                            settings.logo_image_data = None
+                            settings.logo_image_mime = mime_type
+                            flash('Logo uploaded to S3 successfully!', 'success')
+                        else:
+                            # fallback to DB storage
+                            b64_data = encode_image_to_base64(file)
+                            settings.logo_image_data = b64_data
+                            settings.logo_image_mime = mime_type
+                            settings.logo_image = f"/database/logo_from_{secure_filename(file.filename)}"
+                            flash('Logo saved to database (fallback) successfully!', 'success')
+                    else:
+                        b64_data = encode_image_to_base64(file)
+                        settings.logo_image_data = b64_data
+                        settings.logo_image_mime = mime_type
+                        settings.logo_image = f"/database/logo_from_{secure_filename(file.filename)}"
+                        flash('Logo saved to database successfully!', 'success')
                 except Exception as e:
                     flash(f'Logo upload failed: {str(e)}', 'warning')
         
-        # Handle banner 1 upload (store as base64 in DB for persistence on Vercel)
+        # Handle banner 1 upload (prefer S3 if configured, otherwise store as base64 in DB)
         if 'banner1_file' in request.files and request.files['banner1_file']:
             file = request.files['banner1_file']
             if file and file.filename and allowed_file(file.filename):
                 try:
                     mime_type = get_mime_type(file.filename)
-                    b64_data = encode_image_to_base64(file)
-                    settings.banner1_image_data = b64_data
-                    settings.banner1_image_mime = mime_type
-                    settings.banner1_image = f"/database/banner1_from_{secure_filename(file.filename)}"
-                    flash('Banner 1 updated successfully!', 'success')
+                    if is_s3_configured():
+                        key = f"banner1_{int(time.time())}_{secure_filename(file.filename)}"
+                        url = upload_to_s3(file, key, mime_type=mime_type)
+                        if url:
+                            settings.banner1_image = url
+                            settings.banner1_image_data = None
+                            settings.banner1_image_mime = mime_type
+                            flash('Banner 1 uploaded to S3 successfully!', 'success')
+                        else:
+                            b64_data = encode_image_to_base64(file)
+                            settings.banner1_image_data = b64_data
+                            settings.banner1_image_mime = mime_type
+                            settings.banner1_image = f"/database/banner1_from_{secure_filename(file.filename)}"
+                            flash('Banner 1 saved to database (fallback) successfully!', 'success')
+                    else:
+                        b64_data = encode_image_to_base64(file)
+                        settings.banner1_image_data = b64_data
+                        settings.banner1_image_mime = mime_type
+                        settings.banner1_image = f"/database/banner1_from_{secure_filename(file.filename)}"
+                        flash('Banner 1 saved to database successfully!', 'success')
                 except Exception as e:
                     flash(f'Banner 1 upload failed: {str(e)}', 'warning')
         
-        # Handle banner 2 upload (store as base64 in DB for persistence on Vercel)
+        # Handle banner 2 upload (prefer S3 if configured, otherwise store as base64 in DB)
         if 'banner2_file' in request.files and request.files['banner2_file']:
             file = request.files['banner2_file']
             if file and file.filename and allowed_file(file.filename):
                 try:
                     mime_type = get_mime_type(file.filename)
-                    b64_data = encode_image_to_base64(file)
-                    settings.banner2_image_data = b64_data
-                    settings.banner2_image_mime = mime_type
-                    settings.banner2_image = f"/database/banner2_from_{secure_filename(file.filename)}"
-                    flash('Banner 2 updated successfully!', 'success')
+                    if is_s3_configured():
+                        key = f"banner2_{int(time.time())}_{secure_filename(file.filename)}"
+                        url = upload_to_s3(file, key, mime_type=mime_type)
+                        if url:
+                            settings.banner2_image = url
+                            settings.banner2_image_data = None
+                            settings.banner2_image_mime = mime_type
+                            flash('Banner 2 uploaded to S3 successfully!', 'success')
+                        else:
+                            b64_data = encode_image_to_base64(file)
+                            settings.banner2_image_data = b64_data
+                            settings.banner2_image_mime = mime_type
+                            settings.banner2_image = f"/database/banner2_from_{secure_filename(file.filename)}"
+                            flash('Banner 2 saved to database (fallback) successfully!', 'success')
+                    else:
+                        b64_data = encode_image_to_base64(file)
+                        settings.banner2_image_data = b64_data
+                        settings.banner2_image_mime = mime_type
+                        settings.banner2_image = f"/database/banner2_from_{secure_filename(file.filename)}"
+                        flash('Banner 2 saved to database successfully!', 'success')
                 except Exception as e:
                     flash(f'Banner 2 upload failed: {str(e)}', 'warning')
         
-        # Handle background upload (store as base64 in DB for persistence on Vercel)
+        # Handle background upload (prefer S3 if configured, otherwise store as base64 in DB)
         if 'bg_file' in request.files and request.files['bg_file']:
             file = request.files['bg_file']
             if file and file.filename and allowed_file(file.filename):
                 try:
                     mime_type = get_mime_type(file.filename)
-                    b64_data = encode_image_to_base64(file)
-                    settings.bg_image_data = b64_data
-                    settings.bg_image_mime = mime_type
-                    settings.bg_image = f"/database/bg_from_{secure_filename(file.filename)}"
-                    flash('Background image updated successfully!', 'success')
+                    if is_s3_configured():
+                        key = f"bg_{int(time.time())}_{secure_filename(file.filename)}"
+                        url = upload_to_s3(file, key, mime_type=mime_type)
+                        if url:
+                            settings.bg_image = url
+                            settings.bg_image_data = None
+                            settings.bg_image_mime = mime_type
+                            flash('Background uploaded to S3 successfully!', 'success')
+                        else:
+                            b64_data = encode_image_to_base64(file)
+                            settings.bg_image_data = b64_data
+                            settings.bg_image_mime = mime_type
+                            settings.bg_image = f"/database/bg_from_{secure_filename(file.filename)}"
+                            flash('Background saved to database (fallback) successfully!', 'success')
+                    else:
+                        b64_data = encode_image_to_base64(file)
+                        settings.bg_image_data = b64_data
+                        settings.bg_image_mime = mime_type
+                        settings.bg_image = f"/database/bg_from_{secure_filename(file.filename)}"
+                        flash('Background saved to database successfully!', 'success')
                 except Exception as e:
                     flash(f'Background upload failed: {str(e)}', 'warning')
         
