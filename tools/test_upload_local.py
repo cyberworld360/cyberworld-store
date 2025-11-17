@@ -7,12 +7,23 @@ This script uses the app context to store a small fake PNG into the Settings
 configured it will also attempt an S3 upload (will require valid AWS creds).
 """
 from io import BytesIO
+import sys, os
+# Ensure project root is on sys.path so we can import app.py
+project_root = os.path.dirname(os.path.dirname(__file__))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 from app import app, db, Settings, encode_image_to_base64, is_s3_configured, upload_to_s3
 
 
 def run():
     with app.app_context():
         db.create_all()
+        # Ensure any newly added Settings columns exist for backward compatibility
+        try:
+            from app import _ensure_settings_columns
+            _ensure_settings_columns()
+        except Exception:
+            pass
         settings = Settings.query.first()
         if not settings:
             settings = Settings()
