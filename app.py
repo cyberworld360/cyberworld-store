@@ -456,10 +456,22 @@ class Coupon(db.Model):
 class Settings(db.Model):
     """Store site-wide settings like logo, banner, fonts, etc"""
     id = db.Column(db.Integer, primary_key=True)
+    # Image paths (fallback for old uploads or external URLs)
     logo_image = db.Column(db.String(300), default='/static/images/logo.svg')
     banner1_image = db.Column(db.String(300), default='/static/images/ads1.svg')
     banner2_image = db.Column(db.String(300), default='/static/images/ads2.svg')
     bg_image = db.Column(db.String(300), default='/static/images/product-bg.svg')
+    # Base64-encoded image data (for persistent storage on Vercel's ephemeral /tmp)
+    logo_image_data = db.Column(db.LargeBinary, nullable=True)  # Base64 or binary
+    banner1_image_data = db.Column(db.LargeBinary, nullable=True)
+    banner2_image_data = db.Column(db.LargeBinary, nullable=True)
+    bg_image_data = db.Column(db.LargeBinary, nullable=True)
+    # MIME types for base64 images
+    logo_image_mime = db.Column(db.String(20), default='image/svg+xml')
+    banner1_image_mime = db.Column(db.String(20), default='image/svg+xml')
+    banner2_image_mime = db.Column(db.String(20), default='image/svg+xml')
+    bg_image_mime = db.Column(db.String(20), default='image/svg+xml')
+    # Font and color settings
     primary_font = db.Column(db.String(100), default='Arial, sans-serif')
     secondary_font = db.Column(db.String(100), default='Verdana, sans-serif')
     primary_color = db.Column(db.String(7), default='#27ae60')
@@ -469,6 +481,30 @@ class Settings(db.Model):
     seo_checklist_done = db.Column(db.Boolean, default=False)  # SEO checklist status
     site_announcement = db.Column(db.Text, default="")  # Editable announcement text
     updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now)
+
+    def get_logo_url(self):
+        """Get logo URL: return /image/logo if data stored in DB, else return logo_image path"""
+        if self.logo_image_data:
+            return '/image/logo'
+        return self.logo_image
+
+    def get_banner1_url(self):
+        """Get banner 1 URL: return /image/banner1 if data stored in DB, else return banner1_image path"""
+        if self.banner1_image_data:
+            return '/image/banner1'
+        return self.banner1_image
+
+    def get_banner2_url(self):
+        """Get banner 2 URL: return /image/banner2 if data stored in DB, else return banner2_image path"""
+        if self.banner2_image_data:
+            return '/image/banner2'
+        return self.banner2_image
+
+    def get_bg_url(self):
+        """Get background URL: return /image/bg if data stored in DB, else return bg_image path"""
+        if self.bg_image_data:
+            return '/image/bg'
+        return self.bg_image
 
 
 class FailedEmail(db.Model):
@@ -502,6 +538,35 @@ def load_user(user_id):
 # Utilities
 def allowed_file(fname):
     return "." in fname and fname.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def get_mime_type(filename):
+    """Get MIME type from filename extension"""
+    ext = filename.rsplit(".", 1)[1].lower() if "." in filename else ""
+    mime_map = {
+        'jpg': 'image/jpeg',
+        'jpeg': 'image/jpeg',
+        'png': 'image/png',
+        'gif': 'image/gif',
+        'webp': 'image/webp',
+        'svg': 'image/svg+xml'
+    }
+    return mime_map.get(ext, 'image/jpeg')
+
+def encode_image_to_base64(file_obj):
+    """Read file object and encode to base64 bytes"""
+    import base64
+    file_obj.seek(0)
+    file_content = file_obj.read()
+    return base64.b64encode(file_content)
+
+def decode_image_from_base64(b64_data, mime_type='image/jpeg'):
+    """Create a data URL from base64 image data"""
+    import base64
+    if isinstance(b64_data, bytes):
+        b64_str = b64_data.decode('utf-8')
+    else:
+        b64_str = b64_data
+    return f"data:{mime_type};base64,{b64_str}"
 
 def get_settings():
     """Get site settings, create defaults if not exist"""
@@ -2244,62 +2309,59 @@ def admin_settings():
         if request.form.get('site_announcement') is not None:
             settings.site_announcement = request.form.get('site_announcement')
         
-        # Handle logo upload
+        # Handle logo upload (store as base64 in DB for persistence on Vercel)
         if 'logo_file' in request.files and request.files['logo_file']:
             file = request.files['logo_file']
             if file and file.filename and allowed_file(file.filename):
                 try:
-                    filename = secure_filename(file.filename)
-                    import time
-                    filename = f"logo_{int(time.time())}_{filename}"
-                    dest = Path(app.config['UPLOAD_FOLDER']) / filename
-                    file.save(dest)
-                    settings.logo_image = f'/static/images/{filename}'
+                    mime_type = get_mime_type(file.filename)
+                    b64_data = encode_image_to_base64(file)
+                    settings.logo_image_data = b64_data
+                    settings.logo_image_mime = mime_type
+                    # Keep the filename reference for backward compatibility
+                    settings.logo_image = f"/database/logo_from_{secure_filename(file.filename)}"
                     flash('Logo updated successfully!', 'success')
                 except Exception as e:
                     flash(f'Logo upload failed: {str(e)}', 'warning')
         
-        # Handle banner 1 upload
+        # Handle banner 1 upload (store as base64 in DB for persistence on Vercel)
         if 'banner1_file' in request.files and request.files['banner1_file']:
             file = request.files['banner1_file']
             if file and file.filename and allowed_file(file.filename):
                 try:
-                    filename = secure_filename(file.filename)
-                    import time
-                    filename = f"banner1_{int(time.time())}_{filename}"
-                    dest = Path(app.config['UPLOAD_FOLDER']) / filename
-                    file.save(dest)
-                    settings.banner1_image = f'/static/images/{filename}'
+                    mime_type = get_mime_type(file.filename)
+                    b64_data = encode_image_to_base64(file)
+                    settings.banner1_image_data = b64_data
+                    settings.banner1_image_mime = mime_type
+                    settings.banner1_image = f"/database/banner1_from_{secure_filename(file.filename)}"
                     flash('Banner 1 updated successfully!', 'success')
                 except Exception as e:
                     flash(f'Banner 1 upload failed: {str(e)}', 'warning')
         
-        # Handle banner 2 upload
+        # Handle banner 2 upload (store as base64 in DB for persistence on Vercel)
         if 'banner2_file' in request.files and request.files['banner2_file']:
             file = request.files['banner2_file']
             if file and file.filename and allowed_file(file.filename):
                 try:
-                    filename = secure_filename(file.filename)
-                    import time
-                    filename = f"banner2_{int(time.time())}_{filename}"
-                    dest = Path(app.config['UPLOAD_FOLDER']) / filename
-                    file.save(dest)
-                    settings.banner2_image = f'/static/images/{filename}'
+                    mime_type = get_mime_type(file.filename)
+                    b64_data = encode_image_to_base64(file)
+                    settings.banner2_image_data = b64_data
+                    settings.banner2_image_mime = mime_type
+                    settings.banner2_image = f"/database/banner2_from_{secure_filename(file.filename)}"
                     flash('Banner 2 updated successfully!', 'success')
                 except Exception as e:
                     flash(f'Banner 2 upload failed: {str(e)}', 'warning')
         
-        # Handle background upload
+        # Handle background upload (store as base64 in DB for persistence on Vercel)
         if 'bg_file' in request.files and request.files['bg_file']:
             file = request.files['bg_file']
             if file and file.filename and allowed_file(file.filename):
                 try:
-                    filename = secure_filename(file.filename)
-                    import time
-                    filename = f"bg_{int(time.time())}_{filename}"
-                    dest = Path(app.config['UPLOAD_FOLDER']) / filename
-                    file.save(dest)
-                    settings.bg_image = f'/static/images/{filename}'
+                    mime_type = get_mime_type(file.filename)
+                    b64_data = encode_image_to_base64(file)
+                    settings.bg_image_data = b64_data
+                    settings.bg_image_mime = mime_type
+                    settings.bg_image = f"/database/bg_from_{secure_filename(file.filename)}"
                     flash('Background image updated successfully!', 'success')
                 except Exception as e:
                     flash(f'Background upload failed: {str(e)}', 'warning')
@@ -2632,6 +2694,55 @@ def static_images(fname):
     except Exception as e:
         # If image not found, return 404
         app.logger.warning("Image not found: %s (%s)", fname, e)
+        abort(404)
+
+@app.route('/image/<image_type>')
+def serve_image(image_type):
+    """Serve base64-encoded images from database (for persistent storage on Vercel)"""
+    try:
+        settings = get_settings()
+        if not settings:
+            abort(404)
+        
+        # Map image types to database columns
+        image_map = {
+            'logo': ('logo_image_data', 'logo_image_mime'),
+            'banner1': ('banner1_image_data', 'banner1_image_mime'),
+            'banner2': ('banner2_image_data', 'banner2_image_mime'),
+            'bg': ('bg_image_data', 'bg_image_mime'),
+        }
+        
+        if image_type not in image_map:
+            abort(404)
+        
+        data_col, mime_col = image_map[image_type]
+        image_data = getattr(settings, data_col)
+        mime_type = getattr(settings, mime_col, 'image/jpeg')
+        
+        if not image_data:
+            # Fallback to static image if no data stored
+            abort(404)
+        
+        # Decode base64 and return as binary with correct mime type
+        import base64
+        if isinstance(image_data, bytes):
+            # If stored as bytes, assume it's already base64-encoded
+            try:
+                decoded = base64.b64decode(image_data)
+            except Exception:
+                # If decoding fails, assume it's raw binary
+                decoded = image_data
+        else:
+            # If stored as string, decode it
+            decoded = base64.b64decode(image_data.encode('utf-8') if isinstance(image_data, str) else image_data)
+        
+        return app.response_class(
+            response=decoded,
+            status=200,
+            mimetype=mime_type
+        )
+    except Exception as e:
+        app.logger.warning("Error serving image %s: %s", image_type, e)
         abort(404)
 
 # Error handler

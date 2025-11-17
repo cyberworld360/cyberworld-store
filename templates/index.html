@@ -3,7 +3,7 @@
 <style>
   /* Homepage background styling */
   body {
-    background-image: url('{{ settings.bg_image }}');
+    background-image: url('{{ settings.get_bg_url() }}');
     background-attachment: fixed;
     background-size: cover;
     background-position: center;
@@ -68,8 +68,8 @@
 </style>
 
 <section class="ads-slider">
-  <div class="slide active"><img src="{{ settings.banner1_image }}" alt="Ad 1" /></div>
-  <div class="slide"><img src="{{ settings.banner2_image }}" alt="Ad 2" /></div>
+  <div class="slide active"><img src="{{ settings.get_banner1_url() }}" alt="Ad 1" /></div>
+  <div class="slide"><img src="{{ settings.get_banner2_url() }}" alt="Ad 2" /></div>
 </section>
 
 <section class="hero">
@@ -86,7 +86,7 @@
   <div class="featured-track">
     {% for p in featured %}
     <div class="card">
-      <img src="{{ p.image or settings.bg_image }}" alt="{{ p.title }}" />
+      <img src="{{ p.image or settings.get_bg_url() }}" alt="{{ p.title }}" />
       <h4>{{ p.title }}</h4>
       <p class="price">{{ p.price_ghc|money }} {% if p.old_price_ghc %}<span class="old">{{ p.old_price_ghc|money }}</span>{% endif %}</p>
       <a href="/product/{{ p.id }}" class="btn-outline">View</a>
@@ -99,7 +99,7 @@
   <div class="grid">
     {% for p in products %}
     <div class="card card-{{ p.card_size or 'medium' }}">
-      <img src="{{ p.image or settings.bg_image }}" alt="{{ p.title }}" />
+      <img src="{{ p.image or settings.get_bg_url() }}" alt="{{ p.title }}" />
       <h4>{{ p.title }}</h4>
       <p>{{ p.short }}</p>
       <p class="price">{{ p.price_ghc|money }} {% if p.old_price_ghc %}<span class="old">{{ p.old_price_ghc|money }}</span>{% endif %}</p>

@@ -154,6 +154,50 @@
         margin-top: 10px;
         font-size: 16px;
     }
+    .announcement-textarea {
+        width: 100%;
+        font-size: 16px;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        resize: vertical;
+    }
+    .announcement-textarea:focus {
+        outline: none;
+        border-color: #27ae60;
+        box-shadow: 0 0 0 3px rgba(39, 174, 96, 0.1);
+    }
+    .announcement-toolbar {
+        margin-top: 10px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    .announcement-toolbar button {
+        padding: 8px 12px;
+        background: #27ae60;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 600;
+        transition: all 0.2s;
+    }
+    .announcement-toolbar button:hover {
+        background: #229954;
+        transform: translateY(-1px);
+    }
+    .announcement-toolbar button:active {
+        transform: translateY(0);
+    }
+    .announcement-help {
+        color: #666;
+        font-size: 12px;
+        margin-top: 8px;
+        display: block;
+    }
     @media (max-width: 768px) {
         .settings-grid {
             grid-template-columns: 1fr;
@@ -194,10 +238,10 @@
                     </div>
                     <small>Recommended size: 240x48px</small>
                 </div>
-                {% if settings.logo_image %}
+                {% if settings.logo_image_data or settings.logo_image %}
                 <div class="current-image">
                     <label>Current Logo:</label>
-                    <img src="{{ settings.logo_image }}" alt="Logo" />
+                    <img src="{{ settings.get_logo_url() }}" alt="Logo" />
                 </div>
                 {% endif %}
                 <div class="form-group">
@@ -207,10 +251,10 @@
                         <input type="file" id="banner1_file" name="banner1_file" accept="image/*" />
                     </div>
                     <small>Recommended size: 1200x300px</small>
-                    {% if settings.banner1_image %}
+                    {% if settings.banner1_image_data or settings.banner1_image %}
                     <div class="current-image">
                         <label>Current:</label>
-                        <img src="{{ settings.banner1_image }}" alt="Banner 1" />
+                        <img src="{{ settings.get_banner1_url() }}" alt="Banner 1" />
                     </div>
                     {% endif %}
                 </div>
@@ -221,10 +265,10 @@
                         <input type="file" id="banner2_file" name="banner2_file" accept="image/*" />
                     </div>
                     <small>Recommended size: 1200x300px</small>
-                    {% if settings.banner2_image %}
+                    {% if settings.banner2_image_data or settings.banner2_image %}
                     <div class="current-image">
                         <label>Current:</label>
-                        <img src="{{ settings.banner2_image }}" alt="Banner 2" />
+                        <img src="{{ settings.get_banner2_url() }}" alt="Banner 2" />
                     </div>
                     {% endif %}
                 </div>
@@ -235,10 +279,10 @@
                         <input type="file" id="bg_file" name="bg_file" accept="image/*" />
                     </div>
                     <small>Recommended size: 1920x1080px</small>
-                    {% if settings.bg_image %}
+                    {% if settings.bg_image_data or settings.bg_image %}
                     <div class="current-image">
                         <label>Current:</label>
-                        <img src="{{ settings.bg_image }}" alt="Background" />
+                        <img src="{{ settings.get_bg_url() }}" alt="Background" />
                     </div>
                     {% endif %}
                 </div>
@@ -302,16 +346,6 @@
                 <div class="form-group">
                     <label for="paystack_callback">Paystack Callback URL</label>
                     <input type="text" id="paystack_callback" value="{{ PAYSTACK_CALLBACK }}" readonly title="Paystack callback URL" placeholder="https://yourdomain.com/paystack/callback" />
-                        .announcement-textarea {
-                            width: 100%;
-                            font-size: 16px;
-                        }
-                        .announcement-toolbar {
-                            margin-top: 10px;
-                        }
-                        .announcement-help {
-                            color: gray;
-                        }
                     <small>Current Paystack callback URL for payment verification.</small>
                 </div>
             </div>
