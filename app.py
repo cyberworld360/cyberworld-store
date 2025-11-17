@@ -343,6 +343,10 @@ class AdminUser(UserMixin, db.Model):
 
     def check_password(self, raw):
         return check_password_hash(self.password_hash, raw)
+    @property
+    def is_admin(self):
+        """Explicit admin indicator for permission checks."""
+        return True
 
 class User(UserMixin, db.Model):
     """Customer user account for wallet and order history"""
@@ -360,6 +364,10 @@ class User(UserMixin, db.Model):
 
     def check_password(self, raw):
         return check_password_hash(self.password_hash, raw)
+    @property
+    def is_admin(self):
+        """Non-admin customer user."""
+        return False
 
 class Wallet(db.Model):
     """User wallet for storing balance"""
@@ -659,6 +667,18 @@ def money_filter(value):
 def inject_now():
     settings = get_settings()
     return {"now": utc_now(), "PAYSTACK_PUBLIC": PAYSTACK_PUBLIC, "settings": settings}
+
+
+def admin_required(f):
+    """Decorator to enforce admin-only access. Checks is_admin property and redirects non-admins."""
+    from functools import wraps
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not getattr(current_user, 'is_admin', False):
+            flash('Admin access required. Please login as admin.', 'danger')
+            return redirect(url_for('index'))
+        return f(*args, **kwargs)
+    return decorated_function
 
 
 def send_email(to_address: str, subject: str, body: str):
@@ -1383,7 +1403,8 @@ def wallet_payment():
 
         # Log order creation
         try:
-            log = OrderLog(order_id=order.id, changed_by=current_user.username if hasattr(current_user, 'username') else current_user.email, old_status=None, new_status=order.status, note='Order created via wallet')
+            changed_by = getattr(current_user, 'username', None) or getattr(current_user, 'email', 'system')
+            log = OrderLog(order_id=order.id, changed_by=changed_by, old_status=None, new_status=order.status, note='Order created via wallet')
             db.session.add(log)
         except Exception:
             pass
@@ -1860,12 +1881,12 @@ def validate_coupon():
 @app.route('/admin/login', methods=['GET','POST'])
 def admin_login():
     # If a customer is logged in, redirect them away
-    if current_user.is_authenticated and hasattr(current_user, 'email') and not hasattr(current_user, 'username'):
+    if current_user.is_authenticated and hasattr(current_user, 'email') and not getattr(current_user, 'is_admin', False):
         flash('Please logout before accessing admin panel.', 'warning')
         return redirect(url_for('index'))
     
     # If admin already logged in, redirect to admin panel
-    if current_user.is_authenticated and hasattr(current_user, 'username'):
+    if current_user.is_authenticated and getattr(current_user, 'is_admin', False):
         return redirect(url_for('admin_index'))
     
     if request.method == 'POST':
@@ -1953,7 +1974,7 @@ def user_logout():
 @login_required
 def admin_index():
     # Only allow AdminUser, not customer User
-    if not hasattr(current_user, 'username'):
+    if not getattr(current_user, 'is_admin', False):
         flash('Admin access required. Please login as admin.', 'danger')
         return redirect(url_for('index'))
 
@@ -1967,7 +1988,7 @@ def admin_index():
 @app.route('/admin/order/<int:oid>/invoice')
 @login_required
 def admin_order_invoice(oid):
-    if not hasattr(current_user, 'username'):
+    if not getattr(current_user, 'is_admin', False):
         flash('Admin access required. Please login as admin.', 'danger')
         return redirect(url_for('index'))
     order = Order.query.get_or_404(oid)
@@ -1978,7 +1999,7 @@ def admin_order_invoice(oid):
 @login_required
 def admin_new():
     # Only allow AdminUser, not customer User
-    if not hasattr(current_user, 'username'):
+    if not getattr(current_user, 'is_admin', False):
         flash('Admin access required. Please login as admin.', 'danger')
         return redirect(url_for('index'))
     
@@ -2040,7 +2061,7 @@ def admin_new():
 @login_required
 def admin_edit(pid):
     # Only allow AdminUser, not customer User
-    if not hasattr(current_user, 'username'):
+    if not getattr(current_user, 'is_admin', False):
         flash('Admin access required. Please login as admin.', 'danger')
         return redirect(url_for('index'))
     
@@ -2106,7 +2127,7 @@ def admin_edit(pid):
 @app.route('/admin/orders')
 @login_required
 def admin_orders():
-    if not hasattr(current_user, 'username'):
+    if not getattr(current_user, 'is_admin', False):
         flash('Admin access required. Please login as admin.', 'danger')
         return redirect(url_for('index'))
     orders = Order.query.order_by(Order.created_at.desc()).all()
@@ -2116,7 +2137,7 @@ def admin_orders():
 @app.route('/admin/orders/export')
 @login_required
 def admin_orders_export():
-    if not hasattr(current_user, 'username'):
+    if not getattr(current_user, 'is_admin', False):
         flash('Admin access required. Please login as admin.', 'danger')
         return redirect(url_for('index'))
     import csv
@@ -2133,7 +2154,7 @@ def admin_orders_export():
 @app.route('/admin/order/<int:oid>')
 @login_required
 def admin_order_detail(oid):
-    if not hasattr(current_user, 'username'):
+    if not getattr(current_user, 'is_admin', False):
         flash('Admin access required. Please login as admin.', 'danger')
         return redirect(url_for('index'))
     order = Order.query.get_or_404(oid)
@@ -2144,7 +2165,7 @@ def admin_order_detail(oid):
 @app.route('/admin/order/<int:oid>/update_status', methods=['POST'])
 @login_required
 def admin_order_update_status(oid):
-    if not hasattr(current_user, 'username'):
+    if not getattr(current_user, 'is_admin', False):
         flash('Admin access required. Please login as admin.', 'danger')
         return redirect(url_for('index'))
     order = Order.query.get_or_404(oid)
@@ -2251,7 +2272,7 @@ def admin_order_update_status(oid):
 @login_required
 def admin_delete(pid):
     # Only allow AdminUser, not customer User
-    if not hasattr(current_user, 'username'):
+    if not getattr(current_user, 'is_admin', False):
         flash('Admin access required. Please login as admin.', 'danger')
         return redirect(url_for('index'))
     
@@ -2271,7 +2292,7 @@ def admin_delete(pid):
 def admin_wallets():
     """View and manage user wallets"""
     # Check if user is admin (has username attribute from AdminUser)
-    if not hasattr(current_user, 'username'):
+    if not getattr(current_user, 'is_admin', False):
         flash('Admin access required.', 'danger')
         return redirect(url_for('index'))
     
@@ -2282,7 +2303,7 @@ def admin_wallets():
 @login_required
 def admin_credit_wallet(user_id):
     """Credit a user's wallet"""
-    if not hasattr(current_user, 'username'):
+    if not getattr(current_user, 'is_admin', False):
         flash('Admin access required.', 'danger')
         return redirect(url_for('index'))
     
@@ -2310,7 +2331,7 @@ def admin_credit_wallet(user_id):
 @login_required
 def admin_debit_wallet(user_id):
     """Debit a user's wallet"""
-    if not hasattr(current_user, 'username'):
+    if not getattr(current_user, 'is_admin', False):
         flash('Admin access required.', 'danger')
         return redirect(url_for('index'))
     
@@ -2338,7 +2359,7 @@ def admin_debit_wallet(user_id):
 @login_required
 def admin_settings():
     """Manage site settings like logo, banners, fonts, colors"""
-    if not hasattr(current_user, 'username'):
+    if not getattr(current_user, 'is_admin', False):
         flash('Admin access required.', 'danger')
         return redirect(url_for('index'))
     
@@ -2509,7 +2530,7 @@ def admin_settings_api():
         authorized = True
     else:
         # Fall back to session-based admin check
-        authorized = hasattr(current_user, 'username') and getattr(current_user, 'username', None)
+        authorized = getattr(current_user, 'is_admin', False) and getattr(current_user, 'username', None)
 
     if not authorized:
         return jsonify({'status': 'error', 'message': 'Admin access required'}), 403
@@ -2584,7 +2605,7 @@ def admin_settings_api():
 @login_required
 def admin_coupons():
     """List all coupons"""
-    if not hasattr(current_user, 'username'):
+    if not getattr(current_user, 'is_admin', False):
         flash('Admin access required.', 'danger')
         return redirect(url_for('index'))
     
@@ -2595,7 +2616,7 @@ def admin_coupons():
 @login_required
 def admin_coupon_new():
     """Create new coupon"""
-    if not hasattr(current_user, 'username'):
+    if not getattr(current_user, 'is_admin', False):
         flash('Admin access required.', 'danger')
         return redirect(url_for('index'))
     
@@ -2643,7 +2664,7 @@ def admin_coupon_new():
 @login_required
 def admin_coupon_edit(cid):
     """Edit coupon"""
-    if not hasattr(current_user, 'username'):
+    if not getattr(current_user, 'is_admin', False):
         flash('Admin access required.', 'danger')
         return redirect(url_for('index'))
     
@@ -2683,7 +2704,7 @@ def admin_coupon_edit(cid):
 @login_required
 def admin_coupon_delete(cid):
     """Delete coupon"""
-    if not hasattr(current_user, 'username'):
+    if not getattr(current_user, 'is_admin', False):
         flash('Admin access required.', 'danger')
         return redirect(url_for('index'))
     
@@ -2704,7 +2725,7 @@ def admin_coupon_delete(cid):
 @login_required
 def admin_sliders():
     """List all sliders"""
-    if not hasattr(current_user, 'username'):
+    if not getattr(current_user, 'is_admin', False):
         flash('Admin access required.', 'danger')
         return redirect(url_for('index'))
     
@@ -2715,7 +2736,7 @@ def admin_sliders():
 @login_required
 def admin_slider_new():
     """Create new slider"""
-    if not hasattr(current_user, 'username'):
+    if not getattr(current_user, 'is_admin', False):
         flash('Admin access required.', 'danger')
         return redirect(url_for('index'))
     
@@ -2754,7 +2775,7 @@ def admin_slider_new():
 @login_required
 def admin_slider_edit(sid):
     """Edit slider"""
-    if not hasattr(current_user, 'username'):
+    if not getattr(current_user, 'is_admin', False):
         flash('Admin access required.', 'danger')
         return redirect(url_for('index'))
     
@@ -2787,7 +2808,7 @@ def admin_slider_edit(sid):
 @login_required
 def admin_slider_delete(sid):
     """Delete slider"""
-    if not hasattr(current_user, 'username'):
+    if not getattr(current_user, 'is_admin', False):
         flash('Admin access required.', 'danger')
         return redirect(url_for('index'))
     
