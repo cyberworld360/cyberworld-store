@@ -116,8 +116,9 @@ else:
     if vercel_url:
         PAYSTACK_CALLBACK = f"https://{vercel_url.rstrip('/')}/paystack/callback"
     else:
-        # sensible default - update to your real domain if different
-        PAYSTACK_CALLBACK = os.environ.get("LIVE_DOMAIN", "https://cyberworld-store-86kt.vercel.app") + "/paystack/callback"
+        # Default to user's production domain
+        base_url = os.environ.get("LIVE_DOMAIN", "https://www.cyberworldstore.shop")
+        PAYSTACK_CALLBACK = base_url.rstrip('/') + "/paystack/callback" if not base_url.endswith('/paystack/callback') else base_url
 
 # Email / SMTP settings (optional)
 MAIL_SERVER = os.environ.get("MAIL_SERVER", "")
@@ -319,6 +320,9 @@ class Product(db.Model):
     price_ghc = db.Column(db.Numeric(10, 2), nullable=False, default=0.0)
     old_price_ghc = db.Column(db.Numeric(10, 2))
     image = db.Column(db.String(300))
+    # Optional BLOB fallback for serverless deployments where saving to static is not possible
+    product_image_data = db.Column(db.LargeBinary, nullable=True)
+    product_image_mime = db.Column(db.String(50), nullable=True)
     featured = db.Column(db.Boolean, default=False)
     card_size = db.Column(db.String(20), default='medium')
 
@@ -1113,8 +1117,16 @@ def initdb_command():
 
         if cnt == 0:
             sample = [
-                {"title":"Sample Soundbar", "short":"High quality sound bar", "price_ghc":1190.45, "old_price_ghc":1434.00, "image":"/static/images/placeholder.png", "featured":True},
                 {"title":"Wireless Modem 4G/5G", "short":"High speed wireless modem", "price_ghc":700.00, "old_price_ghc":780.00, "image":"/static/images/placeholder.png", "featured":True},
+                {"title":"Sample Soundbar", "short":"High quality sound bar", "price_ghc":1190.45, "old_price_ghc":1434.00, "image":"/static/images/placeholder.png", "featured":True},
+                {"title":"OALE EARBUDS iFREE 13", "short":"Premium wireless earbuds with noise cancellation", "price_ghc":300.00, "old_price_ghc":450.00, "image":"/static/images/placeholder.png", "featured":True},
+                {"title":"USB-C Fast Charger 65W", "short":"Quick charge technology, universal compatibility", "price_ghc":150.00, "old_price_ghc":200.00, "image":"/static/images/placeholder.png", "featured":False},
+                {"title":"Portable SSD 1TB", "short":"High-speed portable storage, USB 3.1", "price_ghc":450.00, "old_price_ghc":600.00, "image":"/static/images/placeholder.png", "featured":False},
+                {"title":"Wireless Mouse & Keyboard", "short":"Ergonomic design, long battery life", "price_ghc":250.00, "old_price_ghc":350.00, "image":"/static/images/placeholder.png", "featured":False},
+                {"title":"4K WebCamera Pro", "short":"Crystal clear 4K video, built-in microphone", "price_ghc":380.00, "old_price_ghc":520.00, "image":"/static/images/placeholder.png", "featured":True},
+                {"title":"Phone Screen Protector Pack (5)", "short":"Tempered glass, all popular phone models", "price_ghc":45.00, "old_price_ghc":75.00, "image":"/static/images/placeholder.png", "featured":False},
+                {"title":"HDMI 2.1 Cable 2m", "short":"Supports 8K resolution, high bandwidth", "price_ghc":65.00, "old_price_ghc":100.00, "image":"/static/images/placeholder.png", "featured":False},
+                {"title":"Gaming Headset RGB", "short":"Surround sound, RGB lighting, noise isolation", "price_ghc":320.00, "old_price_ghc":450.00, "image":"/static/images/placeholder.png", "featured":True},
             ]
             for s in sample:
                 try:
@@ -2116,9 +2128,30 @@ def admin_edit(pid):
                 filename = secure_filename(file.filename)
                 import time
                 filename = f"{int(time.time())}_{filename}"
-                dest = Path(app.config['UPLOAD_FOLDER']) / filename
-                file.save(dest)
-                p.image = f'/static/images/{filename}'
+                mime_type = get_mime_type(file.filename)
+                # Upload to S3 when configured
+                if is_s3_configured():
+                    key = f"products/{int(time.time())}_{filename}"
+                    url = upload_to_s3(file, key, mime_type=mime_type)
+                    if url:
+                        p.image = url
+                    else:
+                        # fallback to DB blob
+                        b64_data = encode_image_to_base64(file)
+                        p.product_image_data = b64_data
+                        p.product_image_mime = mime_type
+                        p.image = url_for('product_image', pid=p.id)
+                else:
+                    if 'static' in app.config.get('UPLOAD_FOLDER', ''):
+                        dest = Path(app.config['UPLOAD_FOLDER']) / filename
+                        file.save(dest)
+                        p.image = f'/static/images/{filename}'
+                    else:
+                        # Serverless fallback - store in DB
+                        b64_data = encode_image_to_base64(file)
+                        p.product_image_data = b64_data
+                        p.product_image_mime = mime_type
+                        p.image = url_for('product_image', pid=p.id)
             except Exception as e:
                 flash(f'Image upload failed: {str(e)}', 'warning')
 
@@ -2893,10 +2926,39 @@ def serve_image(image_type):
         app.logger.warning("Error serving image %s: %s", image_type, e)
         abort(404)
 
+
+@app.route('/product/image/<int:pid>')
+def product_image(pid):
+    """Serve product image stored in DB (fallback for serverless deployments)."""
+    try:
+        p = Product.query.get_or_404(pid)
+        if p.product_image_data:
+            data = p.product_image_data
+            # If stored as base64 bytes, decode; otherwise assume binary
+            import base64
+            try:
+                if isinstance(data, (bytes, bytearray)):
+                    decoded = base64.b64decode(data)
+                else:
+                    decoded = base64.b64decode(data.encode('utf-8'))
+            except Exception:
+                decoded = data if isinstance(data, (bytes, bytearray)) else data.encode('utf-8')
+            mime = p.product_image_mime or 'image/jpeg'
+            return app.response_class(response=decoded, status=200, mimetype=mime)
+        # If no DB image but image field exists and is an absolute URL, redirect to it
+        if p.image and (p.image.startswith('http://') or p.image.startswith('https://')):
+            return redirect(p.image)
+        abort(404)
+    except Exception as e:
+        app.logger.warning('Error serving product image %s: %s', pid, e)
+        abort(404)
+
+
 # Error handler
 @app.errorhandler(404)
 def page_not_found(e):
     return render_template("404.html"), 404
+
 
 if __name__ == '__main__':
     with app.app_context():
