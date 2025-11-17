@@ -1,0 +1,14 @@
+{% extends 'admin_base.html' %}
+{% block content %}
+<h2>Admin Diagnostics</h2>
+<table class="table">
+  <tbody>
+    {% for k, v in diagnostics.items() %}
+    <tr>
+      <th>{{ k }}</th>
+      <td>{{ v }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

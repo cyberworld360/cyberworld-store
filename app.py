@@ -111,14 +111,11 @@ _env_callback = os.environ.get("PAYSTACK_CALLBACK_URL", "").strip()
 if _env_callback:
     PAYSTACK_CALLBACK = _env_callback
 else:
-    # Vercel exposes the deployment hostname in VERCEL_URL (or NOW_URL for legacy)
-    vercel_url = os.environ.get("VERCEL_URL") or os.environ.get("NOW_URL")
-    if vercel_url:
-        PAYSTACK_CALLBACK = f"https://{vercel_url.rstrip('/')}/paystack/callback"
-    else:
-        # Default to user's production domain
-        base_url = os.environ.get("LIVE_DOMAIN", "https://www.cyberworldstore.shop")
-        PAYSTACK_CALLBACK = base_url.rstrip('/') + "/paystack/callback" if not base_url.endswith('/paystack/callback') else base_url
+    # Use explicit PAYSTACK_CALLBACK_URL if provided, otherwise force the customer's
+    # production domain to ensure Paystack always calls the desired callback URL.
+    # This intentionally prefers `PAYSTACK_CALLBACK_URL` and then falls back to
+    # the fixed production domain below (overriding Vercel runtime hostname).
+    PAYSTACK_CALLBACK = os.environ.get("PAYSTACK_CALLBACK_URL") or "https://www.cyberworldstore.shop/paystack/callback"
 
 # Email / SMTP settings (optional)
 MAIL_SERVER = os.environ.get("MAIL_SERVER", "")
@@ -2004,6 +2001,39 @@ def admin_index():
     settings = get_settings()
     dashboard_layout = settings.dashboard_layout if settings and hasattr(settings, 'dashboard_layout') else 'grid'
     return render_template('admin_index.html', products=prods, recent_orders=recent_orders, dashboard_layout=dashboard_layout)
+
+
+@app.route('/admin/diagnostics')
+@login_required
+def admin_diagnostics():
+    """Simple diagnostics page showing runtime config useful for debugging production."""
+    if not getattr(current_user, 'is_admin', False):
+        flash('Admin access required.', 'danger')
+        return redirect(url_for('index'))
+
+    settings = get_settings()
+    product_count = 0
+    try:
+        product_count = Product.query.count()
+    except Exception:
+        product_count = -1
+
+    has_paystack_secret = bool(PAYSTACK_SECRET)
+    has_paystack_public = bool(PAYSTACK_PUBLIC)
+
+    diagnostics = {
+        'PAYSTACK_CALLBACK': PAYSTACK_CALLBACK,
+        'PAYSTACK_SECRET_CONFIGURED': has_paystack_secret,
+        'PAYSTACK_PUBLIC_CONFIGURED': has_paystack_public,
+        'PRODUCT_COUNT': product_count,
+        'SETTINGS_HAS_LOGO_DB': bool(settings.logo_image_data),
+        'SETTINGS_HAS_BANNER1_DB': bool(settings.banner1_image_data),
+        'UPLOAD_FOLDER': app.config.get('UPLOAD_FOLDER'),
+        'DB_URI': app.config.get('SQLALCHEMY_DATABASE_URI')
+    }
+
+    # Render a minimal diagnostics page
+    return render_template('admin_diagnostics.html', diagnostics=diagnostics)
 
 
 @app.route('/admin/order/<int:oid>/invoice')
