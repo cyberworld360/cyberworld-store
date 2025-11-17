@@ -456,8 +456,16 @@ class Coupon(db.Model):
             return False, "Coupon is inactive"
         if self.max_uses and self.current_uses >= self.max_uses:
             return False, "Coupon usage limit reached"
-        if self.expiry_date and utc_now() > self.expiry_date:
-            return False, "Coupon has expired"
+        # Compare expiry dates safely (handle both naive and aware datetimes)
+        if self.expiry_date:
+            now = utc_now()
+            expiry = self.expiry_date
+            # If expiry is naive, make it aware in UTC
+            if expiry.tzinfo is None:
+                from datetime import timezone as dt_timezone
+                expiry = expiry.replace(tzinfo=dt_timezone.utc)
+            if now > expiry:
+                return False, "Coupon has expired"
         return True, "Valid"
     
     def calculate_discount(self, amount):
@@ -598,7 +606,8 @@ def upload_to_s3(file_obj, key, mime_type=None):
     Expects env vars: AWS_S3_BUCKET, AWS_REGION (optional). Uses boto3 if installed.
     """
     try:
-        import boto3
+        import importlib
+        boto3 = importlib.import_module('boto3')
         bucket = os.environ.get('AWS_S3_BUCKET')
         region = os.environ.get('AWS_REGION') or None
         # Build client using env creds
