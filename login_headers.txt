@@ -1,0 +1,13 @@
+HTTP/1.1 302 Found
+Cache-Control: public, max-age=0, must-revalidate
+Content-Length: 199
+Content-Type: text/html; charset=utf-8
+Date: Tue, 18 Nov 2025 17:22:00 GMT
+Location: /admin
+Server: Vercel
+Set-Cookie: session=.eJwljkGqAjEQRK8y9FpkknSSzpzh30BEOp1uHVA_TJyVeHcDroqieMV7w8Xu3G_aYTm9YXqNgL6LaO9wgL__61XbtD4n7hO3x_o8wvlzPgxq036D5bXtOtraYIFCPnBkcRhSJiOpEWdGk6Bq0oI0V8kwiiSPLrhMqDWNLVVPGNSrd6URcUuJDXWuzB6xZvIRU8OSC7XExY8biQUtmGXnLJbkKPM8fC971-1n4-DzBWQNQQU.aRyrOA.J32nwo97BDA_EpWrbUb2me74btw; HttpOnly; Path=/
+Strict-Transport-Security: max-age=63072000
+Vary: Cookie
+X-Vercel-Cache: MISS
+X-Vercel-Id: cpt1::iad1::62xbl-1763486520498-94c3b878e16c
+

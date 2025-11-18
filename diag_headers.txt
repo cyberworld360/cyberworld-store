@@ -1,0 +1,12 @@
+HTTP/1.1 200 OK
+Age: 0
+Cache-Control: public, max-age=0, must-revalidate
+Content-Length: 203
+Content-Type: application/json
+Date: Tue, 18 Nov 2025 17:22:07 GMT
+Server: Vercel
+Strict-Transport-Security: max-age=63072000
+Vary: Cookie
+X-Vercel-Cache: MISS
+X-Vercel-Id: cpt1::iad1::wzkbn-1763486527096-fc648d53dcea
+

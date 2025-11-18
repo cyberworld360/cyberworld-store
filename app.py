@@ -79,16 +79,25 @@ def utc_now():
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "change-me")
-# Use a writable temporary DB path when running on Vercel serverless (VERCEL env var present)
+
+# Database configuration with persistence on Vercel
 _env_db = os.environ.get("SQLALCHEMY_DATABASE_URI", "").strip()
-if _env_db:
-    app.config["SQLALCHEMY_DATABASE_URI"] = _env_db
+_db_url = _env_db or os.environ.get("DATABASE_URL", "").strip()
+
+if _db_url:
+    # Use explicit database URL from environment
+    app.config["SQLALCHEMY_DATABASE_URI"] = _db_url
+elif os.environ.get("VERCEL") or os.environ.get("VERCEL_URL"):
+    # On Vercel without DATABASE_URL: Use /tmp SQLite as fallback
+    # WARNING: /tmp is ephemeral! Data will be lost between deployments.
+    # To fix: Set DATABASE_URL env var in Vercel to a persistent PostgreSQL, MySQL, or other database.
+    # See DATABASE_PERSISTENCE_FIX.md for instructions.
+    print("[WARNING] Running on Vercel without persistent DATABASE_URL! Data will not persist between deployments.")
+    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:////tmp/data.db"
 else:
-    if os.environ.get("VERCEL") or os.environ.get("VERCEL_URL"):
-        # Vercel serverless functions have a writable /tmp directory
-        app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:////tmp/data.db"
-    else:
-        app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{BASE_DIR / 'data.db'}"
+    # Local development: use local SQLite
+    app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{BASE_DIR / 'data.db'}"
+
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["UPLOAD_FOLDER"] = str(UPLOAD_FOLDER)
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024  # 5MB

@@ -1,16 +1,16 @@
 {
-  "SECRET_KEY": "cyberworld_super_secure_key_2024",
-  "ADMIN_USERNAME": "Cyberjnr",
-  "ADMIN_PASSWORD": "GITG360$",
-  "PAYSTACK_SECRET_KEY": "sk_live_ba182349c726db1394b001f097983848984d51ee",
-  "PAYSTACK_PUBLIC_KEY": "pk_live_907a4a9059ed82e13af54f4610f85c2578de1beb",
-  "PAYSTACK_CALLBACK_URL": "https://www.cyberworldstore.shop/paystack/callback",
+  "SECRET_KEY": "replace-with-random-secret",
+  "ADMIN_USERNAME": "your-admin-username",
+  "ADMIN_PASSWORD": "your-admin-password",
+  "PAYSTACK_SECRET_KEY": "sk_live_REPLACE",
+  "PAYSTACK_PUBLIC_KEY": "pk_live_REPLACE",
+  "PAYSTACK_CALLBACK_URL": "https://your-domain/paystack/callback",
   "MAIL_SERVER": "smtp.gmail.com",
   "MAIL_PORT": 465,
-  "MAIL_USERNAME": "cyberworldstore360@gmail.com",
-  "MAIL_PASSWORD": "zjetrsduxubgkpuj",
+  "MAIL_USERNAME": "your-smtp-username",
+  "MAIL_PASSWORD": "your-smtp-password",
   "MAIL_USE_TLS": false,
   "MAIL_USE_SSL": true,
-  "MAIL_DEFAULT_SENDER": "CYBER WORLD STORE",
-  "ADMIN_EMAIL": "cyberworldstore360@gmail.com"
+  "MAIL_DEFAULT_SENDER": "Your Store Name",
+  "ADMIN_EMAIL": "admin@yourdomain.com"
 }
