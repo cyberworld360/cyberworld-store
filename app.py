@@ -1830,6 +1830,35 @@ def admin_test_email():
             print(f"[email error] Admin test email failed: {e}")
         return jsonify({"status": "error", "detail": str(e)}), 500
 
+
+@app.route('/admin/diag')
+@admin_required
+def admin_diag():
+    """Admin diagnostics: returns runtime config and simple counts."""
+    try:
+        prod_count = Product.query.count()
+    except Exception:
+        prod_count = None
+    try:
+        settings = Settings.query.first()
+        settings_present = bool(settings)
+    except Exception:
+        settings_present = None
+    try:
+        paystack_keys_present = bool(PAYSTACK_SECRET and PAYSTACK_PUBLIC)
+    except Exception:
+        paystack_keys_present = False
+
+    data = {
+        "paystack_callback": PAYSTACK_CALLBACK,
+        "paystack_keys_present": paystack_keys_present,
+        "mail_configured": bool(MAIL_SERVER and MAIL_USERNAME),
+        "admin_email": ADMIN_EMAIL,
+        "product_count": prod_count,
+        "settings_present": settings_present
+    }
+    return jsonify(data), 200
+
 @app.route("/checkout", methods=["GET", "POST"])
 def checkout():
     cart = _cart()
