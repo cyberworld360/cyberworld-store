@@ -1,7 +1,8 @@
 {% extends 'base.html' %}
 {% block content %}
 <div class="admin-form-container">
-  <h2>{% if product %}Edit Product{% else %}Add New Product{% endif %}</h2>
+  <h2>{% if product %}Edit Product{% else %}Add New Product (unlimited){% endif %}</h2>
+  <p class="admin-unlimited-note">Admins may add unlimited products for customers to shop — no product count limits enforced.</p>
   
   <form method="post" enctype="multipart/form-data" class="admin-form">
     <div class="form-group">
@@ -73,7 +74,7 @@
       {% if product and product.image %}
         <div class="current-image">
           <p>Current image:</p>
-          <img src="{{ product.image }}" alt="{{ product.title }}" style="max-width: 150px; max-height: 150px;">
+          <img src="{{ product.image }}" alt="{{ product.title }}" class="current-image-img">
         </div>
       {% endif %}
     </div>
@@ -207,6 +208,18 @@
   display: flex;
   gap: 10px;
   margin-top: 10px;
+}
+
+.current-image-img {
+  max-width: 150px;
+  max-height: 150px;
+  display: block;
+}
+
+.admin-unlimited-note {
+  margin-top:6px;
+  color:#555;
+  font-size:13px;
 }
 
 .btn {

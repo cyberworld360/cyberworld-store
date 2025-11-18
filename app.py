@@ -1928,13 +1928,16 @@ def validate_coupon():
 @app.route('/admin/login', methods=['GET','POST'])
 def admin_login():
     # If a customer is logged in, redirect them away
-    if current_user.is_authenticated and hasattr(current_user, 'email') and not getattr(current_user, 'is_admin', False):
-        flash('Please logout before accessing admin panel.', 'warning')
-        return redirect(url_for('index'))
-    
-    # If admin already logged in, redirect to admin panel
-    if current_user.is_authenticated and getattr(current_user, 'is_admin', False):
-        return redirect(url_for('admin_index'))
+    try:
+        if current_user.is_authenticated and hasattr(current_user, 'email') and not getattr(current_user, 'is_admin', False):
+            flash('Please logout before accessing admin panel.', 'warning')
+            return redirect(url_for('index'))
+        
+        # If admin already logged in, redirect to admin panel
+        if current_user.is_authenticated and getattr(current_user, 'is_admin', False):
+            return redirect(url_for('admin_index'))
+    except Exception:
+        pass
     
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
@@ -2019,6 +2022,7 @@ def user_logout():
 
 @app.route('/admin')
 @login_required
+@admin_required
 def admin_index():
     # Only allow AdminUser, not customer User
     if not getattr(current_user, 'is_admin', False):
@@ -2034,6 +2038,7 @@ def admin_index():
 
 @app.route('/admin/diagnostics')
 @login_required
+@admin_required
 def admin_diagnostics():
     """Simple diagnostics page showing runtime config useful for debugging production."""
     if not getattr(current_user, 'is_admin', False):
@@ -2067,6 +2072,7 @@ def admin_diagnostics():
 
 @app.route('/admin/order/<int:oid>/invoice')
 @login_required
+@admin_required
 def admin_order_invoice(oid):
     if not getattr(current_user, 'is_admin', False):
         flash('Admin access required. Please login as admin.', 'danger')
@@ -2077,6 +2083,7 @@ def admin_order_invoice(oid):
 
 @app.route('/admin/new', methods=['GET','POST'])
 @login_required
+@admin_required
 def admin_new():
     # Only allow AdminUser, not customer User
     if not getattr(current_user, 'is_admin', False):
@@ -2139,6 +2146,7 @@ def admin_new():
 
 @app.route('/admin/edit/<int:pid>', methods=['GET','POST'])
 @login_required
+@admin_required
 def admin_edit(pid):
     # Only allow AdminUser, not customer User
     if not getattr(current_user, 'is_admin', False):
@@ -2227,6 +2235,7 @@ def admin_edit(pid):
 
 @app.route('/admin/orders')
 @login_required
+@admin_required
 def admin_orders():
     if not getattr(current_user, 'is_admin', False):
         flash('Admin access required. Please login as admin.', 'danger')
@@ -2237,6 +2246,7 @@ def admin_orders():
 
 @app.route('/admin/orders/export')
 @login_required
+@admin_required
 def admin_orders_export():
     if not getattr(current_user, 'is_admin', False):
         flash('Admin access required. Please login as admin.', 'danger')
@@ -2254,6 +2264,7 @@ def admin_orders_export():
 
 @app.route('/admin/order/<int:oid>')
 @login_required
+@admin_required
 def admin_order_detail(oid):
     if not getattr(current_user, 'is_admin', False):
         flash('Admin access required. Please login as admin.', 'danger')
@@ -2265,6 +2276,7 @@ def admin_order_detail(oid):
 
 @app.route('/admin/order/<int:oid>/update_status', methods=['POST'])
 @login_required
+@admin_required
 def admin_order_update_status(oid):
     if not getattr(current_user, 'is_admin', False):
         flash('Admin access required. Please login as admin.', 'danger')
@@ -2371,6 +2383,7 @@ def admin_order_update_status(oid):
 
 @app.route('/admin/delete/<int:pid>', methods=['POST'])
 @login_required
+@admin_required
 def admin_delete(pid):
     # Only allow AdminUser, not customer User
     if not getattr(current_user, 'is_admin', False):
@@ -2390,6 +2403,7 @@ def admin_delete(pid):
 
 @app.route('/admin/wallets')
 @login_required
+@admin_required
 def admin_wallets():
     """View and manage user wallets"""
     # Check if user is admin (has username attribute from AdminUser)
@@ -2402,6 +2416,7 @@ def admin_wallets():
 
 @app.route('/admin/wallet/credit/<int:user_id>', methods=['POST'])
 @login_required
+@admin_required
 def admin_credit_wallet(user_id):
     """Credit a user's wallet"""
     if not getattr(current_user, 'is_admin', False):
@@ -2430,6 +2445,7 @@ def admin_credit_wallet(user_id):
 
 @app.route('/admin/wallet/debit/<int:user_id>', methods=['POST'])
 @login_required
+@admin_required
 def admin_debit_wallet(user_id):
     """Debit a user's wallet"""
     if not getattr(current_user, 'is_admin', False):
@@ -2458,6 +2474,7 @@ def admin_debit_wallet(user_id):
 
 @app.route('/admin/settings', methods=['GET', 'POST'])
 @login_required
+@admin_required
 def admin_settings():
     """Manage site settings like logo, banners, fonts, colors"""
     if not getattr(current_user, 'is_admin', False):
@@ -2704,6 +2721,7 @@ def admin_settings_api():
 
 @app.route('/admin/coupons')
 @login_required
+@admin_required
 def admin_coupons():
     """List all coupons"""
     if not getattr(current_user, 'is_admin', False):
@@ -2715,6 +2733,7 @@ def admin_coupons():
 
 @app.route('/admin/coupon/new', methods=['GET', 'POST'])
 @login_required
+@admin_required
 def admin_coupon_new():
     """Create new coupon"""
     if not getattr(current_user, 'is_admin', False):
@@ -2763,6 +2782,7 @@ def admin_coupon_new():
 
 @app.route('/admin/coupon/edit/<int:cid>', methods=['GET', 'POST'])
 @login_required
+@admin_required
 def admin_coupon_edit(cid):
     """Edit coupon"""
     if not getattr(current_user, 'is_admin', False):
@@ -2803,6 +2823,7 @@ def admin_coupon_edit(cid):
 
 @app.route('/admin/coupon/delete/<int:cid>', methods=['POST'])
 @login_required
+@admin_required
 def admin_coupon_delete(cid):
     """Delete coupon"""
     if not getattr(current_user, 'is_admin', False):
@@ -2824,6 +2845,7 @@ def admin_coupon_delete(cid):
 
 @app.route('/admin/sliders')
 @login_required
+@admin_required
 def admin_sliders():
     """List all sliders"""
     if not getattr(current_user, 'is_admin', False):
@@ -2835,6 +2857,7 @@ def admin_sliders():
 
 @app.route('/admin/slider/new', methods=['GET', 'POST'])
 @login_required
+@admin_required
 def admin_slider_new():
     """Create new slider"""
     if not getattr(current_user, 'is_admin', False):
@@ -2874,6 +2897,7 @@ def admin_slider_new():
 
 @app.route('/admin/slider/edit/<int:sid>', methods=['GET', 'POST'])
 @login_required
+@admin_required
 def admin_slider_edit(sid):
     """Edit slider"""
     if not getattr(current_user, 'is_admin', False):
@@ -2907,6 +2931,7 @@ def admin_slider_edit(sid):
 
 @app.route('/admin/slider/delete/<int:sid>', methods=['POST'])
 @login_required
+@admin_required
 def admin_slider_delete(sid):
     """Delete slider"""
     if not getattr(current_user, 'is_admin', False):

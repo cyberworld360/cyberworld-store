@@ -5,20 +5,24 @@
     <h2>Product Management Dashboard</h2>
     <div class="admin-header-actions">
       <a class="btn btn-secondary" href="/admin/orders">Orders</a>
-      <a class="btn btn-add" href="/admin/new">+ Add New Product</a>
+      <a class="btn btn-add" href="/admin/new">+ Add New Product (unlimited)</a>
     </div>
   </div>
 
-  {% if recent_orders %}
+  <div class="admin-unlimited-note">
+    <strong>Note:</strong> Admins can add an unlimited number of products — there is no hard limit in the UI or backend.
+  </div>
+
+  {%- if recent_orders %}
   <div class="recent-orders">
     <h3>Recent orders</h3>
-    <ul>
-      {% for o in recent_orders %}
-        <li><a href="{{ url_for('admin_order_detail', oid=o.id) }}">{{ o.reference[:8] }} — {{ o.email }} — {{ o.total|money }}</a> ({{ o.status }})</li>
-      {% endfor %}
-    </ul>
+    <div class="recent-orders-list">
+      {%- for o in recent_orders %}
+        <div class="recent-order-item"><a href="{{ url_for('admin_order_detail', oid=o.id) }}">{{ o.reference[:8] }} — {{ o.email }} — {{ o.total|money }}</a> ({{ o.status }})</div>
+      {%- endfor %}
+    </div>
   </div>
-  {% endif %}
+  {%- endif %}
   <div class="export-orders">
     <a class="btn btn-secondary" href="{{ url_for('admin_orders_export') }}">Export Orders (CSV)</a>
   </div>
@@ -159,6 +163,16 @@
   gap: 20px;
 }
 
+.recent-orders-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.recent-order-item {
+  padding: 6px 0;
+  font-size: 14px;
+}
+
 .products-list {
   display: flex;
   flex-direction: column;
@@ -217,6 +231,12 @@
   .products-grid {
     grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
   }
+}
+
+.admin-unlimited-note {
+  margin-top:8px;
+  color:#555;
+  font-size:13px;
 }
 
 @media (max-width: 480px) {
