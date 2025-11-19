@@ -1,0 +1,61 @@
+name: Migrate and Smoke Test
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  migrate:
+    name: Run Migrations
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run DB Migrations
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          FLASK_APP: app.py
+        run: |
+          if [ -z "${DATABASE_URL}" ]; then
+            echo "ERROR: DATABASE_URL is not set in secrets"; exit 1
+          fi
+          export SQLALCHEMY_DATABASE_URI="$DATABASE_URL"
+          python -m flask db upgrade
+
+  smoke:
+    name: Smoke Tests
+    needs: migrate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run CI Smoke Tests
+        env:
+          DEPLOY_URL: ${{ secrets.DEPLOY_URL }}
+          ADMIN_USER: ${{ secrets.ADMIN_USER }}
+          ADMIN_PASS: ${{ secrets.ADMIN_PASS }}
+        run: |
+          if [ -z "${DEPLOY_URL}" ]; then
+            echo "ERROR: DEPLOY_URL secret not set"; exit 1
+          fi
+          python scripts/ci_smoke_test.py
