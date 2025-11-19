@@ -21,6 +21,16 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Verify DB Connectivity
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          FLASK_APP: app.py
+        run: |
+          if [ -z "${DATABASE_URL}" ]; then
+            echo "ERROR: DATABASE_URL is not set in secrets"; exit 1
+          fi
+          python scripts/check_db.py
+
       - name: Run DB Migrations
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
