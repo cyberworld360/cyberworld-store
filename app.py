@@ -1868,6 +1868,46 @@ def admin_diag():
     }
     return jsonify(data), 200
 
+
+@app.route('/admin/diag-env')
+def admin_diag_env():
+    """Temporary diagnostics endpoint to check environment variables and DB connectivity.
+
+    - Requires `DIAG_TOKEN` environment variable to be set and provided as `?token=...`.
+    - Does NOT return secret values; only presence and connectivity state.
+    """
+    token = request.args.get('token')
+    expected = os.environ.get('DIAG_TOKEN')
+    if not expected or token != expected:
+        return jsonify({"error": "diag token required"}), 403
+
+    required_envs = [
+        'DATABASE_URL', 'MAIL_SERVER', 'MAIL_USERNAME', 'PAYSTACK_PUBLIC', 'PAYSTACK_SECRET'
+    ]
+    env_status = {k: bool(os.environ.get(k) or app.config.get(k)) for k in required_envs}
+
+    # Test DB connectivity without exposing credentials
+    db_ok = False
+    db_error = None
+    db_url = os.environ.get('DATABASE_URL') or os.environ.get('SQLALCHEMY_DATABASE_URI')
+    if db_url:
+        try:
+            # Use SQLAlchemy engine already configured
+            from sqlalchemy import text
+            with app.app_context():
+                engine = db.get_engine()
+                with engine.connect() as conn:
+                    conn.execute(text('SELECT 1'))
+            db_ok = True
+        except Exception as e:
+            db_error = str(e)
+
+    result = {
+        'env': env_status,
+        'db': {'ok': db_ok, 'error': db_error}
+    }
+    return jsonify(result), 200
+
 @app.route("/checkout", methods=["GET", "POST"])
 def checkout():
     cart = _cart()
