@@ -153,13 +153,67 @@ if sender_email:
     MAIL_DEFAULT_SENDER = f"CYBER WORLD STORE <{sender_email}>"
 else:
     MAIL_DEFAULT_SENDER = "CYBER WORLD STORE <no-reply@cyberworldstore.shop>"
+
 ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "cyberworldstore360@gmail.com")
 
-db = SQLAlchemy(app)
-# Flask-Migrate (Alembic) setup
-migrate = Migrate(app, db)
-login_manager = LoginManager(app)
-login_manager.login_view = 'user_login'  # type: ignore
+# Create SQLAlchemy instance without binding to app immediately so we can
+# handle missing DB drivers (e.g. psycopg2) gracefully at import time.
+db = SQLAlchemy()
+migrate = None
+login_manager = None
+
+def _safe_initialize_extensions(application):
+    """Init DB and extensions while handling missing DB drivers.
+
+    Behavior:
+    - If URI is Postgres and `psycopg2` is available: use it.
+    - If URI is Postgres and `psycopg2` is missing but `pg8000` is available:
+      rewrite URI to use `postgresql+pg8000://` so SQLAlchemy picks pg8000.
+    - If neither driver is present and URI is Postgres: fall back to a local
+      SQLite file so the app can still start and serve diagnostics.
+    """
+    global migrate, login_manager
+    try:
+        import importlib.util
+        uri = application.config.get("SQLALCHEMY_DATABASE_URI", "") or ""
+        is_postgres = uri.startswith("postgres://") or uri.startswith("postgresql://")
+
+        if is_postgres:
+            have_psycopg2 = importlib.util.find_spec("psycopg2") is not None or importlib.util.find_spec("psycopg2_binary") is not None
+            have_pg8000 = importlib.util.find_spec("pg8000") is not None
+
+            if not have_psycopg2 and have_pg8000:
+                # Rewrite to use pg8000 dialect for SQLAlchemy
+                if uri.startswith("postgres://"):
+                    new_uri = "postgresql+pg8000://" + uri[len("postgres://"):]
+                elif uri.startswith("postgresql://"):
+                    new_uri = "postgresql+pg8000://" + uri[len("postgresql://"):]
+                else:
+                    new_uri = uri
+                application.logger.info("psycopg2 not found; using pg8000. Rewriting DB URI to use pg8000.")
+                application.config["SQLALCHEMY_DATABASE_URI"] = new_uri
+                uri = new_uri
+            elif not have_psycopg2 and not have_pg8000:
+                # Neither driver available — fall back to local sqlite so diagnostics work
+                application.logger.error("No Postgres driver installed (psycopg2 or pg8000). Falling back to sqlite.")
+                fallback = f"sqlite:///{BASE_DIR / 'data.db'}"
+                application.logger.warning("Falling back SQLALCHEMY_DATABASE_URI to %s", fallback)
+                application.config["SQLALCHEMY_DATABASE_URI"] = fallback
+
+        # Now initialize DB and other extensions
+        db.init_app(application)
+        migrate = Migrate(application, db)
+        login_manager = LoginManager(application)
+        login_manager.login_view = 'user_login'  # type: ignore
+    except Exception as exc:
+        try:
+            application.logger.exception("Failed to initialize database/extensions: %s", exc)
+        except Exception:
+            print(f"[init error] Failed to initialize extensions: {exc}")
+
+
+# Call safe init so extensions are configured at import time but protected
+_safe_initialize_extensions(app)
 
 CURRENCY = "GH\u20B5"  # GH₵
 
