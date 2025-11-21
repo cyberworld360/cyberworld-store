@@ -227,6 +227,36 @@ def _safe_initialize_extensions(application):
                 application.logger.warning("Falling back SQLALCHEMY_DATABASE_URI to %s", fallback)
                 application.config["SQLALCHEMY_DATABASE_URI"] = fallback
 
+        # Aggressive cleanup: remove `sslmode` from any DB URI query string
+        # because some DB-API drivers (notably pg8000) do not accept it as
+        # a connect() keyword. Instead we provide an ssl_context via
+        # SQLALCHEMY_ENGINE_OPTIONS.connect_args so drivers receive a proper
+        # SSL configuration without getting an unexpected kwarg.
+        try:
+            parsed_any = urllib.parse.urlsplit(uri)
+            qs_any = urllib.parse.parse_qs(parsed_any.query, keep_blank_values=True)
+            if 'sslmode' in qs_any:
+                qs_any.pop('sslmode', None)
+                clean_q_any = urllib.parse.urlencode({k: v[0] for k, v in qs_any.items()})
+                cleaned_any = urllib.parse.urlunsplit((parsed_any.scheme, parsed_any.netloc, parsed_any.path, clean_q_any, parsed_any.fragment))
+                application.logger.info('Stripping sslmode from DB URI for driver compatibility')
+                application.config['SQLALCHEMY_DATABASE_URI'] = cleaned_any
+                uri = cleaned_any
+                try:
+                    ctx_any = ssl.create_default_context()
+                    application.config.setdefault('SQLALCHEMY_ENGINE_OPTIONS', {})
+                    application.config['SQLALCHEMY_ENGINE_OPTIONS'].setdefault('connect_args', {})
+                    application.config['SQLALCHEMY_ENGINE_OPTIONS']['connect_args']['ssl_context'] = ctx_any
+                    application.logger.info('Provided ssl_context via SQLALCHEMY_ENGINE_OPTIONS for DB driver')
+                except Exception:
+                    application.logger.warning('Failed to create ssl_context; continuing without it')
+        except Exception:
+            # Non-fatal: proceed with initialization; log if possible
+            try:
+                application.logger.debug('sslmode cleanup encountered an error; continuing')
+            except Exception:
+                pass
+
         # Now initialize DB and other extensions
         db.init_app(application)
         migrate = Migrate(application, db)
