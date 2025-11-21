@@ -235,11 +235,14 @@ def _safe_initialize_extensions(application):
         try:
             parsed_any = urllib.parse.urlsplit(uri)
             qs_any = urllib.parse.parse_qs(parsed_any.query, keep_blank_values=True)
-            if 'sslmode' in qs_any:
-                qs_any.pop('sslmode', None)
+            # Remove any SSL-related query params (sslmode, sslrootcert, sslcert, sslkey, etc.)
+            ssl_keys = [k for k in list(qs_any.keys()) if k.lower().startswith('ssl')]
+            if ssl_keys:
+                for k in ssl_keys:
+                    qs_any.pop(k, None)
                 clean_q_any = urllib.parse.urlencode({k: v[0] for k, v in qs_any.items()})
                 cleaned_any = urllib.parse.urlunsplit((parsed_any.scheme, parsed_any.netloc, parsed_any.path, clean_q_any, parsed_any.fragment))
-                application.logger.info('Stripping sslmode from DB URI for driver compatibility')
+                application.logger.info('Stripping SSL-related params (%s) from DB URI for driver compatibility', ','.join(ssl_keys))
                 application.config['SQLALCHEMY_DATABASE_URI'] = cleaned_any
                 uri = cleaned_any
                 try:
@@ -251,9 +254,8 @@ def _safe_initialize_extensions(application):
                 except Exception:
                     application.logger.warning('Failed to create ssl_context; continuing without it')
         except Exception:
-            # Non-fatal: proceed with initialization; log if possible
             try:
-                application.logger.debug('sslmode cleanup encountered an error; continuing')
+                application.logger.debug('ssl cleanup encountered an error; continuing')
             except Exception:
                 pass
 
