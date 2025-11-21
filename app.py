@@ -37,6 +37,7 @@ import requests
 import uuid
 import smtplib
 import ssl
+import urllib.parse
 import threading
 import time
 from email.utils import parseaddr
@@ -190,9 +191,35 @@ def _safe_initialize_extensions(application):
                     new_uri = "postgresql+pg8000://" + uri[len("postgresql://"):]
                 else:
                     new_uri = uri
+                # If the incoming URI contains a `sslmode` query parameter (common in
+                # cloud DATABASE_URL values), remove it because pg8000.connect() does
+                # not accept an `sslmode` keyword. Instead, supply an SSL context via
+                # SQLAlchemy connect_args so the driver gets a proper ssl_context.
+                parsed = urllib.parse.urlsplit(new_uri)
+                qs = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
+                had_sslmode = False
+                if 'sslmode' in qs:
+                    had_sslmode = True
+                    qs.pop('sslmode', None)
+                # Rebuild a cleaned URI without sslmode
+                clean_q = urllib.parse.urlencode({k: v[0] for k, v in qs.items()})
+                cleaned = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, parsed.path, clean_q, parsed.fragment))
                 application.logger.info("psycopg2 not found; using pg8000. Rewriting DB URI to use pg8000.")
-                application.config["SQLALCHEMY_DATABASE_URI"] = new_uri
-                uri = new_uri
+                application.config["SQLALCHEMY_DATABASE_URI"] = cleaned
+                uri = cleaned
+                # If sslmode was requested, provide an ssl_context to pg8000 via
+                # SQLALCHEMY_ENGINE_OPTIONS so connect() won't receive unsupported
+                # keyword args. Use a default SSL context for 'require' and related modes.
+                if had_sslmode:
+                    try:
+                        ctx = ssl.create_default_context()
+                        application.config.setdefault('SQLALCHEMY_ENGINE_OPTIONS', {})
+                        # pg8000 expects 'ssl_context' keyword in its connect args
+                        application.config['SQLALCHEMY_ENGINE_OPTIONS'].setdefault('connect_args', {})
+                        application.config['SQLALCHEMY_ENGINE_OPTIONS']['connect_args']['ssl_context'] = ctx
+                        application.logger.info('Provided ssl_context via SQLALCHEMY_ENGINE_OPTIONS for pg8000')
+                    except Exception:
+                        application.logger.warning('Failed to create ssl_context for pg8000; continuing without it')
             elif not have_psycopg2 and not have_pg8000:
                 # Neither driver available — fall back to local sqlite so diagnostics work
                 application.logger.error("No Postgres driver installed (psycopg2 or pg8000). Falling back to sqlite.")
