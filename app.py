@@ -89,12 +89,21 @@ if _db_url:
     # Use explicit database URL from environment
     app.config["SQLALCHEMY_DATABASE_URI"] = _db_url
 elif os.environ.get("VERCEL") or os.environ.get("VERCEL_URL"):
-    # On Vercel without DATABASE_URL: Use /tmp SQLite as fallback
-    # WARNING: /tmp is ephemeral! Data will be lost between deployments.
-    # To fix: Set DATABASE_URL env var in Vercel to a persistent PostgreSQL, MySQL, or other database.
-    # See DATABASE_PERSISTENCE_FIX.md for instructions.
-    print("[WARNING] Running on Vercel without persistent DATABASE_URL! Data will not persist between deployments.")
-    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:////tmp/data.db"
+    # Running on Vercel in production without a persistent DATABASE_URL
+    # is dangerous: /tmp is ephemeral and data will be lost between deployments.
+    # Fail-fast here so deployments don't silently use ephemeral SQLite.
+    # To run on Vercel, set a persistent `DATABASE_URL` (Neon/Supabase/Railway/Postgres).
+    msg = (
+        "Missing persistent DATABASE_URL in Vercel environment. "
+        "Set the `DATABASE_URL` env var to a managed Postgres (Neon/Supabase/Railway) "
+        "or set `FORCE_EPHEMERAL=1` to permit ephemeral /tmp SQLite (not recommended)."
+    )
+    # Allow opting in to ephemeral SQLite by explicitly setting FORCE_EPHEMERAL=1
+    if os.environ.get('FORCE_EPHEMERAL') == '1':
+        print("[WARNING] FORCE_EPHEMERAL=1: using ephemeral /tmp SQLite on Vercel (data will not persist).")
+        app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:////tmp/data.db"
+    else:
+        raise RuntimeError(msg)
 else:
     # Local development: use local SQLite
     app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{BASE_DIR / 'data.db'}"
@@ -161,7 +170,9 @@ ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "cyberworldstore360@gmail.com")
 # handle missing DB drivers (e.g. psycopg2) gracefully at import time.
 db = SQLAlchemy()
 migrate = None
-login_manager = None
+# Create a LoginManager instance early so decorators (e.g. @login_manager.user_loader)
+# can be applied at import time; it will be bound to the Flask app in _safe_initialize_extensions.
+login_manager = LoginManager()
 
 def _safe_initialize_extensions(application):
     """Init DB and extensions while handling missing DB drivers.
@@ -258,11 +269,13 @@ def _safe_initialize_extensions(application):
                 application.logger.debug('ssl cleanup encountered an error; continuing')
             except Exception:
                 pass
-
         # Now initialize DB and other extensions
         db.init_app(application)
         migrate = Migrate(application, db)
-        login_manager = LoginManager(application)
+        # Bind the pre-created LoginManager instance to the application.
+        # Do NOT reassign `login_manager` here because the @login_manager.user_loader
+        # decorator registers callbacks on the original instance at module import time.
+        login_manager.init_app(application)
         login_manager.login_view = 'user_login'  # type: ignore
     except Exception as exc:
         try:
