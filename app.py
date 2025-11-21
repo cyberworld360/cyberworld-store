@@ -297,7 +297,24 @@ def init_db_on_first_request():
         return
     try:
         with app.app_context():
-            db.create_all()
+            # Optional automatic migrations: when AUTO_MIGRATE=1, attempt to
+            # run Alembic migrations (flask-migrate) on first request. This is
+            # useful for deployments where you want the app to bring the schema
+            # up-to-date automatically. If migrations fail, fall back to
+            # db.create_all() so diagnostics still work.
+            if os.environ.get('AUTO_MIGRATE') == '1':
+                try:
+                    from flask_migrate import upgrade as _fl_upgrade
+                    app.logger.info('AUTO_MIGRATE=1: running alembic upgrade head')
+                    _fl_upgrade()
+                except Exception as mig_exc:
+                    try:
+                        app.logger.exception('AUTO_MIGRATE failed, falling back to create_all: %s', mig_exc)
+                    except Exception:
+                        print(f"AUTO_MIGRATE failed: {mig_exc}")
+                    db.create_all()
+            else:
+                db.create_all()
             # Ensure Settings table has all expected columns
             _ensure_settings_columns()
             # Ensure default admin user exists
