@@ -1461,6 +1461,86 @@ def paystack_init():
         flash("Paystack initialization error: " + str(e), "danger")
         return redirect(url_for("checkout"))
 
+
+@app.route("/pay/paystack/url", methods=["POST"])
+def paystack_init_url():
+    """Initialize a Paystack transaction and return the authorization URL as JSON.
+
+    This mirrors `/pay/paystack` but returns a JSON response with the
+    `authorization_url` so clients (JS or mobile apps) can consume the URL
+    without following an immediate redirect. Behavior and validation mirror
+    the existing endpoint and it stores `session['pending_payment']` for
+    verification on callback.
+    """
+    # Reuse the same logic as paystack_init but return JSON instead of redirect
+    cart = _cart()
+    if not cart:
+        return jsonify({'status': 'error', 'message': 'Cart is empty.'}), 400
+
+    total = Decimal("0")
+    items = []
+    for pid_str, qty in cart.items():
+        pid = int(pid_str); qty = int(qty)
+        p = Product.query.get(pid)
+        if not p: continue
+        subtotal = Decimal(p.price_ghc) * qty
+        total += subtotal
+        items.append({"product": p.title, "product_id": p.id, "qty": qty, "subtotal": float(subtotal)})
+
+    email = request.form.get("email") or "customer@example.com"
+    name = request.form.get("name", "").strip()
+    phone = request.form.get("phone", "").strip()
+    city = request.form.get("city", "").strip()
+    coupon_id = request.form.get("coupon_id", "").strip()
+    discount = Decimal('0')
+    if coupon_id:
+        try:
+            coupon = Coupon.query.get(int(coupon_id))
+            if coupon:
+                valid, msg = coupon.is_valid()
+                if valid and total >= Decimal(str(coupon.min_amount)):
+                    discount = coupon.calculate_discount(total)
+                else:
+                    return jsonify({'status': 'error', 'message': f'Coupon invalid or minimum amount not met: {msg}'}), 400
+        except Exception:
+            pass
+
+    final_total = max(total - discount, Decimal('0'))
+    amount_minor = int(float(final_total) * 100)
+
+    initialize_url = "https://api.paystack.co/transaction/initialize"
+    headers = {"Authorization": f"Bearer {PAYSTACK_SECRET}", "Content-Type": "application/json"}
+    reference = str(uuid.uuid4())
+    payload = {
+        "email": email,
+        "amount": amount_minor,
+        "reference": reference,
+        "callback_url": PAYSTACK_CALLBACK,
+        "metadata": {
+            "cart": items,
+            "name": name,
+            "phone": phone,
+            "city": city,
+            "discount_amount": str(discount),
+            "coupon_applied": coupon_id if coupon_id else "none"
+        }
+    }
+
+    if not PAYSTACK_SECRET:
+        return jsonify({'status': 'error', 'message': 'Paystack secret key not configured.'}), 500
+
+    try:
+        r = requests.post(initialize_url, json=payload, headers=headers, timeout=15)
+        r.raise_for_status()
+        data = r.json()
+        if data.get("status") and data.get("data") and data["data"].get("authorization_url"):
+            session["pending_payment"] = {"reference": reference, "amount": amount_minor, "email": email, "items": items, "coupon_id": int(coupon_id) if coupon_id else None, "discount": str(discount)}
+            return jsonify({'status': 'success', 'authorization_url': data['data']['authorization_url'], 'reference': reference}), 200
+        else:
+            return jsonify({'status': 'error', 'message': 'Failed to initialize Paystack payment.'}), 500
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': f'Paystack initialization error: {e}'}), 500
+
 @app.route("/pay/wallet", methods=["POST"])
 def wallet_payment():
     """Pay with wallet balance"""
