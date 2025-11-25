@@ -14,6 +14,7 @@
       }
       body {
         font-family: var(--primary-font);
+        margin: 0; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
       }
       h1, h2, h3, h4, h5, h6 {
         font-family: var(--secondary-font);
@@ -22,35 +23,44 @@
   </head>
   <body>
     <header class="site-header">
-      <div class="container">
-        <div class="brand">
+      <div class="container header-grid">
+        <div class="header-left">
+          <button id="mobile-menu-toggle" class="mobile-menu-toggle" aria-label="Toggle menu">☰</button>
+          <nav class="main-nav">
+            <div class="nav-panel" aria-hidden="true">
+            {% if current_user.is_authenticated %}
+              {% if current_user.username is defined %}
+                <!-- Admin links - grouped under hamburger menu -->
+                <a href="/admin">Admin</a>
+                <a href="/admin/wallets">Wallets</a>
+                <a href="/admin/sliders">Sliders</a>
+                <a href="/admin/coupons">Coupons</a>
+                <a href="/admin/settings">Settings</a>
+                <a href="/admin/logout">Admin Logout</a>
+              {% else %}
+                <!-- Customer links hidden in panel for access via menu -->
+                <span class="panel-user">{{ current_user.email }}</span>
+                <a href="/logout">Logout</a>
+                <a href="/register">Register</a>
+                <a href="/login">Customer Login</a>
+              {% endif %}
+            {% else %}
+              <a href="/admin/login">Admin</a>
+              <a href="/register">Register</a>
+              <a href="/login">Customer Login</a>
+            {% endif %}
+          </div>
+            </div>
+          </nav>
+        </div>
+        <div class="brand center-logo">
           <a href="/" class="logo-link">
             <img src="{{ settings.get_logo_url() }}" alt="CyberWorld" class="logo-img" />
           </a>
         </div>
-        <nav class="main-nav">
-          <a href="/">Home</a>
-          <a href="/cart">Cart</a>
-          {% if current_user.is_authenticated %}
-            {% if current_user.username is defined %}
-              <!-- Admin user -->
-              <a href="/admin">Admin</a>
-              <a href="/admin/wallets">Wallets</a>
-              <a href="/admin/sliders">Sliders</a>
-              <a href="/admin/coupons">Coupons</a>
-              <a href="/admin/settings">Settings</a>
-              <a href="/admin/logout">Admin Logout</a>
-            {% else %}
-              <!-- Customer user -->
-              <span style="margin-left: 1rem; color: #fff;">{{ current_user.email }}</span>
-              <a href="/logout">Logout</a>
-            {% endif %}
-          {% else %}
-            <a href="/register">Register</a>
-            <a href="/login">Customer Login</a>
-            <a href="/admin/login">Admin</a>
-          {% endif %}
-        </nav>
+        <div class="header-right">
+          <a href="/cart" class="cart-link" aria-label="Cart">🛒<span class="cart-count" aria-live="polite" aria-atomic="true"></span></a>
+        </div>
       </div>
     </header>
     <main class="container">
@@ -70,6 +80,22 @@
     </footer>
     
     <script>
+      // Mobile nav toggle
+      document.addEventListener('DOMContentLoaded', function(){
+        const toggle = document.getElementById('mobile-menu-toggle');
+          const nav = document.querySelector('.main-nav');
+          const panel = nav ? nav.querySelector('.nav-panel') : null;
+          if (toggle && nav) {
+            toggle.addEventListener('click', () => {
+              nav.classList.toggle('open');
+              if (panel) {
+                const isOpen = nav.classList.contains('open');
+                panel.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+              }
+            });
+          }
+      })
+
       // Simple autoslider for ads (rotates images)
       document.addEventListener('DOMContentLoaded', function(){
         // Ads slider
@@ -93,6 +119,77 @@
           nextBtn.addEventListener('click', () => { track.scrollBy({ left: cardWidth, behavior: 'smooth' }); });
         }
       });
+
+        // Cart count population: fetch /cart and parse quantities from the cart table
+        document.addEventListener('DOMContentLoaded', function(){
+          const cartCountEl = document.querySelector('.cart-count');
+          function setCartCount(n){
+            if (!cartCountEl) return;
+            if (!n || Number(n) === 0) {
+              cartCountEl.textContent = '';
+              cartCountEl.style.display = 'none';
+              return;
+            }
+            cartCountEl.textContent = String(n);
+            cartCountEl.style.display = 'inline-block';
+          }
+
+          async function fetchCartCount(){
+            try {
+              const res = await fetch('/cart', { credentials: 'same-origin' });
+              if (!res.ok) return setCartCount(0);
+              const text = await res.text();
+              const parser = new DOMParser();
+              const doc = parser.parseFromString(text, 'text/html');
+              // Try to find the cart table and qty inputs
+              let count = 0;
+              const qtyInputs = doc.querySelectorAll('input[name^="qty_"]');
+              if (qtyInputs && qtyInputs.length) {
+                qtyInputs.forEach(i => { try { count += Number(i.value || 0); } catch(e){} });
+              } else {
+                // Try to detect rows in cart-table
+                const rows = doc.querySelectorAll('.cart-table tbody tr');
+                if (rows && rows.length) {
+                  rows.forEach(r => {
+                    const input = r.querySelector('input[type="number"]');
+                    if (input) { try { count += Number(input.value || 0); } catch(e){} }
+                  });
+                  // if still zero, fallback to number of rows
+                  if (count === 0) count = rows.length;
+                } else {
+                  // If cart page shows "Your cart is empty." then 0
+                  if (text.includes('Your cart is empty')) count = 0;
+                }
+              }
+              setCartCount(count || 0);
+            } catch (err) {
+              // on error don't fail silently; hide count
+              setCartCount(0);
+            }
+          }
+
+          // Update count on load and periodically (in case of client-side changes)
+          fetchCartCount();
+          // Also listen for clicks on add-to-cart buttons to provide instant feedback (best-effort)
+          document.body.addEventListener('submit', function(e){
+            const form = e.target;
+            if (!form || !(form instanceof HTMLFormElement)) return;
+            if (form.action && form.action.includes('/cart/add')) {
+              // Try to update local room: read qty and update displayed value
+              const formQty = form.querySelector('input[name="qty"], input[type="number"]');
+              let qty = 1;
+              if (formQty && formQty.value) {
+                qty = Number(formQty.value) || 1;
+              }
+              // Attempt to read the current count displayed and increment it
+              const cur = Number(cartCountEl ? (cartCountEl.textContent || '0') : '0') || 0;
+              setCartCount(cur + qty);
+            }
+          }, true);
+
+          // Poll occasionally (every 30s) to keep the header count accurate for long-lived pages
+          setInterval(fetchCartCount, 30000);
+        });
     </script>
   </body>
 </html>
