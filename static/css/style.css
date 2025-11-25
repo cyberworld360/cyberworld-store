@@ -41,16 +41,16 @@ body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial; margin:
 
 /* Header / Logo */
 .logo-img { height:48px; display:block; }
-.site-header .header-left { position:absolute; left: 0.8rem; display:flex; align-items:center; gap:10px; }
-.site-header .header-right { position:absolute; right: 0.8rem; display:flex; align-items:center; }
-.site-header .center-logo { text-align:center; position: absolute; left: 50%; transform: translateX(-50%); z-index: 150; }
+.site-header .header-left { position:absolute; left: 0.8rem; display:flex; align-items:center; gap:10px; z-index: 100; top: 50%; transform: translateY(-50%); }
+.site-header .header-right { position:absolute; right: 0.8rem; display:flex; align-items:center; z-index: 100; top: 50%; transform: translateY(-50%); }
+.site-header .center-logo { text-align:center; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 9999; pointer-events: auto; }
 .site-header .main-nav { display:block; }
 .site-header .main-nav a { color: #fff; opacity: 0.95; }
 
 /* Navigation panel (hamburger menu) used for admin dashboard links */
 .main-nav { position: relative; }
 .main-nav .nav-links { display:flex; gap:1rem; align-items:center; }
-.main-nav .nav-panel { display:none; position:absolute; left:0; top:100%; background: #0b1220; border-radius: 6px; padding: .5rem; box-shadow: 0 6px 16px rgba(0,0,0,0.35); z-index: 200; min-width: 220px; }
+.main-nav .nav-panel { display:none; position:absolute; left:0; top:100%; background: #0b1220; border-radius: 6px; padding: .5rem; box-shadow: 0 6px 16px rgba(0,0,0,0.35); z-index: 110; min-width: 220px; }
 .main-nav.open .nav-panel { display:block; }
 .main-nav .nav-panel a { display:block; color:#fff; padding: .5rem 1rem; text-decoration:none; }
 .main-nav .nav-panel .panel-user { display:block; color:#fff; padding: .5rem 1rem; }
