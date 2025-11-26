@@ -372,6 +372,11 @@ def _ensure_settings_columns():
                 ("banner1_image_mime", "VARCHAR(100) DEFAULT 'image/svg+xml'"),
                 ("banner2_image_mime", "VARCHAR(100) DEFAULT 'image/svg+xml'"),
                 ("bg_image_mime", "VARCHAR(100) DEFAULT 'image/svg+xml'"),
+                # New columns for logo and header placement
+                ('logo_height', 'INTEGER DEFAULT 48'),
+                ('logo_top_px', 'INTEGER DEFAULT 0'),
+                ('logo_zindex', 'INTEGER DEFAULT 9999'),
+                ('cart_on_right', 'BOOLEAN DEFAULT 1'),
             ]
             
             # Add missing columns
@@ -659,6 +664,12 @@ class Settings(db.Model):
     seo_visible = db.Column(db.Boolean, default=True)  # Search engine visibility toggle
     seo_checklist_done = db.Column(db.Boolean, default=False)  # SEO checklist status
     site_announcement = db.Column(db.Text, default="")  # Editable announcement text
+    # Logo / header layout control (pixels)
+    logo_height = db.Column(db.Integer, default=48)
+    logo_top_px = db.Column(db.Integer, default=0)
+    logo_zindex = db.Column(db.Integer, default=9999)
+    # Place cart on right side of header when True (opposite hamburger left)
+    cart_on_right = db.Column(db.Boolean, default=True)
     # Logo size and position controls
     logo_height = db.Column(db.Integer, default=48)
     logo_top_px = db.Column(db.Integer, default=0)
@@ -2929,6 +2940,11 @@ def admin_settings():
                     settings.logo_zindex = int(lz)
             except Exception:
                 pass
+            try:
+                # Cart alignment: checked when 'cart_on_right' present
+                settings.cart_on_right = bool(request.form.get('cart_on_right'))
+            except Exception:
+                pass
             settings.updated_at = utc_now()
             db.session.commit()
             flash('Settings saved successfully!', 'success')
@@ -2981,6 +2997,7 @@ def admin_settings_api():
                 'logo_height': settings.logo_height,
                 'logo_top_px': settings.logo_top_px,
                 'logo_zindex': settings.logo_zindex
+                ,'cart_on_right': settings.cart_on_right
             }
         }), 200
 
@@ -2999,6 +3016,8 @@ def admin_settings_api():
             settings.secondary_font = data.get('secondary_font')
         if 'dashboard_layout' in data:
             settings.dashboard_layout = data.get('dashboard_layout')
+        if 'cart_on_right' in data:
+            settings.cart_on_right = bool(data.get('cart_on_right'))
         if 'seo_visible' in data:
             settings.seo_visible = bool(data.get('seo_visible'))
         if 'seo_checklist_done' in data:

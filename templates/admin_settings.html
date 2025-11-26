@@ -334,6 +334,25 @@
                         <input type="text" class="color-hex" value="{{ settings.secondary_color }}" readonly title="Secondary color hex" placeholder="#2c3e50" />
                     </div>
                 </div>
+                <div class="form-group">
+                    <label for="logo_height">Logo Height (px)</label>
+                    <input type="number" id="logo_height" name="logo_height" value="{{ settings.logo_height or 48 }}" min="16" max="240"/>
+                    <small>Adjust the height of the logo in pixels. This helps scale the logo without editing the image file.</small>
+                </div>
+                <div class="form-group">
+                    <label for="logo_top_px">Logo Vertical Offset (px)</label>
+                    <input type="number" id="logo_top_px" name="logo_top_px" value="{{ settings.logo_top_px or 0 }}" min="-100" max="200"/>
+                    <small>Move the logo up (negative) or down (positive) relative to header center.</small>
+                </div>
+                <div class="form-group">
+                    <label for="logo_zindex">Logo Z-Index</label>
+                    <input type="number" id="logo_zindex" name="logo_zindex" value="{{ settings.logo_zindex or 9999 }}" min="0" max="99999"/>
+                    <small>Set the z-index of the logo (higher values keep it above other elements).</small>
+                </div>
+                <div class="form-group">
+                    <label for="cart_on_right">Cart on Right (opposite hamburger)</label>
+                    <input type="checkbox" id="cart_on_right" name="cart_on_right" value="1" {% if settings.cart_on_right %}checked{% endif %} /> Place cart on the right; uncheck to swap the hamburger and cart positions.
+                </div>
             </div>
 
             <!-- Dashboard Category -->
