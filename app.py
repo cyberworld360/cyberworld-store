@@ -351,10 +351,17 @@ def init_db_on_first_request():
 def _ensure_settings_columns():
     """Add missing Settings columns to the database for backward compatibility."""
     try:
-        with db.engine.connect() as conn:
-            # Get all column names in settings table
-            res = conn.exec_driver_sql("PRAGMA table_info(settings)")
-            cols = [r[1] for r in res.fetchall()]
+        # Use SQLAlchemy Inspector to work across DB backends (sqlite, postgres, etc.)
+        from sqlalchemy import inspect
+        inspector = inspect(db.engine)
+        try:
+            cols_info = inspector.get_columns('settings')
+            cols = [c['name'] for c in cols_info]
+        except Exception:
+            # Fallback: try sqlite PRAGMA (older environments)
+            with db.engine.connect() as conn:
+                res = conn.exec_driver_sql("PRAGMA table_info(settings)")
+                cols = [r[1] for r in res.fetchall()]
             
             # List of columns that should exist
             required_cols = [
@@ -380,13 +387,16 @@ def _ensure_settings_columns():
             ]
             
             # Add missing columns
-            for col_name, col_def in required_cols:
-                if col_name not in cols:
-                    try:
-                        conn.exec_driver_sql(f"ALTER TABLE settings ADD COLUMN {col_name} {col_def}")
-                        print(f"Added missing column 'settings.{col_name}'")
-                    except Exception as e:
-                        print(f"Could not add column {col_name}: {e}")
+            with db.engine.connect() as conn:
+                for col_name, col_def in required_cols:
+                    if col_name not in cols:
+                        try:
+                            # Use ALTER TABLE to add the missing column.
+                            # Most DBs (SQLite, Postgres, MySQL) accept this form.
+                            conn.exec_driver_sql(f"ALTER TABLE settings ADD COLUMN {col_name} {col_def}")
+                            print(f"Added missing column 'settings.{col_name}'")
+                        except Exception as e:
+                            print(f"Could not add column {col_name}: {e}")
     except Exception as e:
         print(f"Could not ensure Settings columns: {e}")
 
