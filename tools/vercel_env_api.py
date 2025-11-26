@@ -33,7 +33,25 @@ def load_env_file(path):
 def upsert_env_var(token, project, key, value, target=("production",)):
     url = f"{API_BASE}/v9/projects/{project}/env"
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-    payload = {"key": key, "value": value, "target": list(target)}
+    # Vercel API requires a `type` attribute indicating how the var should be stored
+    # Acceptable values: "plain" or "encrypted". For secrets, use "encrypted".
+    payload = {"key": key, "value": value, "target": list(target), "type": "encrypted"}
+    # Try to find an existing var with the same key and target and update it if present
+    try:
+        r = requests.get(url, headers=headers, timeout=30)
+        if r.status_code == 200:
+            items = r.json().get("envs", [])
+            for item in items:
+                if item.get("key") == key and set(item.get("target", [])) == set(list(target)):
+                    # update existing env var
+                    env_id = item.get("id")
+                    update_url = f"{url}/{env_id}"
+                    resp = requests.patch(update_url, headers=headers, json=payload, timeout=30)
+                    return resp
+    except Exception:
+        # if listing fails, fall back to attempting to create
+        pass
+
     resp = requests.post(url, headers=headers, json=payload, timeout=30)
     return resp
 
