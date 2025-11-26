@@ -659,6 +659,10 @@ class Settings(db.Model):
     seo_visible = db.Column(db.Boolean, default=True)  # Search engine visibility toggle
     seo_checklist_done = db.Column(db.Boolean, default=False)  # SEO checklist status
     site_announcement = db.Column(db.Text, default="")  # Editable announcement text
+    # Logo size and position controls
+    logo_height = db.Column(db.Integer, default=48)
+    logo_top_px = db.Column(db.Integer, default=0)
+    logo_zindex = db.Column(db.Integer, default=9999)
     updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now)
 
     def get_logo_url(self):
@@ -1276,6 +1280,10 @@ def initdb_command():
                 {"title":"Phone Screen Protector Pack (5)", "short":"Tempered glass, all popular phone models", "price_ghc":45.00, "old_price_ghc":75.00, "image":"/static/images/placeholder.png", "featured":False},
                 {"title":"HDMI 2.1 Cable 2m", "short":"Supports 8K resolution, high bandwidth", "price_ghc":65.00, "old_price_ghc":100.00, "image":"/static/images/placeholder.png", "featured":False},
                 {"title":"Gaming Headset RGB", "short":"Surround sound, RGB lighting, noise isolation", "price_ghc":320.00, "old_price_ghc":450.00, "image":"/static/images/placeholder.png", "featured":True},
+                # logo size/position
+                ('logo_height', 'INTEGER DEFAULT 48'),
+                ('logo_top_px', 'INTEGER DEFAULT 0'),
+                ('logo_zindex', 'INTEGER DEFAULT 9999'),
             ]
             for s in sample:
                 try:
@@ -2104,10 +2112,16 @@ def admin_diag_env():
     if not expected or token != expected:
         return jsonify({"error": "diag token required"}), 403
 
+    # Check the canonical env var names used by this app (don't expose values)
     required_envs = [
-        'DATABASE_URL', 'MAIL_SERVER', 'MAIL_USERNAME', 'PAYSTACK_PUBLIC', 'PAYSTACK_SECRET'
+        'DATABASE_URL', 'MAIL_SERVER', 'MAIL_USERNAME',
+        'PAYSTACK_PUBLIC_KEY', 'PAYSTACK_SECRET_KEY'
     ]
-    env_status = {k: bool(os.environ.get(k) or app.config.get(k)) for k in required_envs}
+    env_status = {}
+    for k in required_envs:
+        # Accept either the exact env var or the legacy/app-config key
+        present = bool(os.environ.get(k) or app.config.get(k) or os.environ.get(k.replace('_KEY','')))
+        env_status[k] = present
 
     # Test DB connectivity without exposing credentials
     db_ok = False
@@ -2896,6 +2910,25 @@ def admin_settings():
                     flash(f'Background upload failed: {str(e)}', 'warning')
         
         try:
+            # Logo size/position settings
+            try:
+                lh = request.form.get('logo_height')
+                if lh is not None:
+                    settings.logo_height = int(lh)
+            except Exception:
+                pass
+            try:
+                lt = request.form.get('logo_top_px')
+                if lt is not None:
+                    settings.logo_top_px = int(lt)
+            except Exception:
+                pass
+            try:
+                lz = request.form.get('logo_zindex')
+                if lz is not None:
+                    settings.logo_zindex = int(lz)
+            except Exception:
+                pass
             settings.updated_at = utc_now()
             db.session.commit()
             flash('Settings saved successfully!', 'success')
@@ -2944,7 +2977,10 @@ def admin_settings_api():
                 'banner1_image': settings.banner1_image,
                 'banner2_image': settings.banner2_image,
                 'bg_image': settings.bg_image,
-                'updated_at': settings.updated_at.isoformat() if settings.updated_at else None
+                'updated_at': settings.updated_at.isoformat() if settings.updated_at else None,
+                'logo_height': settings.logo_height,
+                'logo_top_px': settings.logo_top_px,
+                'logo_zindex': settings.logo_zindex
             }
         }), 200
 
@@ -2969,6 +3005,27 @@ def admin_settings_api():
             settings.seo_checklist_done = bool(data.get('seo_checklist_done'))
         if 'site_announcement' in data:
             settings.site_announcement = data.get('site_announcement', '')
+        if 'logo_height' in data:
+            try:
+                lh = data.get('logo_height')
+                if lh is not None and lh != '':
+                    settings.logo_height = int(lh)
+            except Exception:
+                pass
+        if 'logo_top_px' in data:
+            try:
+                lt = data.get('logo_top_px')
+                if lt is not None and lt != '':
+                    settings.logo_top_px = int(lt)
+            except Exception:
+                pass
+        if 'logo_zindex' in data:
+            try:
+                lz = data.get('logo_zindex')
+                if lz is not None and lz != '':
+                    settings.logo_zindex = int(lz)
+            except Exception:
+                pass
 
         settings.updated_at = utc_now()
         db.session.commit()

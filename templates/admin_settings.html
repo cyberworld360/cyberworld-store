@@ -312,6 +312,21 @@
                     </div>
                 </div>
                 <div class="form-group">
+                    <label for="logo_height">Logo height (px)</label>
+                    <input type="number" id="logo_height" name="logo_height" value="{{ settings.logo_height }}" min="8" max="300" />
+                    <small>Set the logo height in pixels (e.g., 48).</small>
+                </div>
+                <div class="form-group">
+                    <label for="logo_top_px">Logo vertical offset (px)</label>
+                    <input type="number" id="logo_top_px" name="logo_top_px" value="{{ settings.logo_top_px }}" min="-200" max="200" />
+                    <small>Positive moves the logo down; negative moves it up. Use 0 to center it vertically.</small>
+                </div>
+                <div class="form-group">
+                    <label for="logo_zindex">Logo z-index</label>
+                    <input type="number" id="logo_zindex" name="logo_zindex" value="{{ settings.logo_zindex }}" min="0" max="99999" />
+                    <small>Higher value displays logo above other header elements (default 9999).</small>
+                </div>
+                <div class="form-group">
                     <label for="secondary_color">Secondary Color (Accents)</label>
                     <div class="color-row">
                         <input type="color" id="secondary_color" name="secondary_color" value="{{ settings.secondary_color }}" />
