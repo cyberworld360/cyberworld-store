@@ -99,7 +99,13 @@ def main():
     
     env_args = " ".join(env_vars)
     
-    deploy_cmd = f"vercel --prod {env_args}"
+    # If a VERCEL_TOKEN is provided, run non-interactively using it (CI friendly)
+    vercel_token = os.environ.get('VERCEL_TOKEN') or os.environ.get('VERCEL_TOKEN'.upper())
+    if vercel_token:
+        # Use the token to run vercel without an interactive login.
+        deploy_cmd = f"vercel --prod --token {vercel_token} {env_args} --confirm"
+    else:
+        deploy_cmd = f"vercel --prod {env_args}"
     if not run_command(deploy_cmd, "Deploy to Vercel"):
         print("\n⚠️  Deployment may have issues. Check your Vercel account.")
         print("Manual deployment: https://vercel.com/new")
