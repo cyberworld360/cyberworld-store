@@ -685,10 +685,11 @@ class Settings(db.Model):
     """Store site-wide settings like logo, banner, fonts, etc"""
     id = db.Column(db.Integer, primary_key=True)
     # Image paths (fallback for old uploads or external URLs)
-    logo_image = db.Column(db.String(300), default='/static/images/logo.svg')
-    banner1_image = db.Column(db.String(300), default='/static/images/ads1.svg')
-    banner2_image = db.Column(db.String(300), default='/static/images/ads2.svg')
-    bg_image = db.Column(db.String(300), default='/static/images/product-bg.svg')
+    # Increase URL column lengths to allow long S3 URLs (some buckets and presigned urls exceed 300 chars)
+    logo_image = db.Column(db.String(1000), default='/static/images/logo.svg')
+    banner1_image = db.Column(db.String(1000), default='/static/images/ads1.svg')
+    banner2_image = db.Column(db.String(1000), default='/static/images/ads2.svg')
+    bg_image = db.Column(db.String(1000), default='/static/images/product-bg.svg')
     # Base64-encoded image data (for persistent storage on Vercel's ephemeral /tmp)
     logo_image_data = db.Column(db.LargeBinary, nullable=True)  # Base64 or binary
     banner1_image_data = db.Column(db.LargeBinary, nullable=True)
@@ -2924,6 +2925,15 @@ def admin_settings():
                         settings.logo_image = f"/database/logo_from_{secure_filename(file.filename)}"
                         flash('Logo saved to database successfully!', 'success')
                 except Exception as e:
+                    try:
+                        app.logger.exception('Logo upload failed')
+                    except Exception:
+                        pass
+                    # Ensure DB session is clean after an upload failure
+                    try:
+                        db.session.rollback()
+                    except Exception:
+                        pass
                     flash(f'Logo upload failed: {str(e)}', 'warning')
         
         # Handle banner 1 upload (prefer S3 if configured, otherwise store as base64 in DB)
@@ -2965,6 +2975,14 @@ def admin_settings():
                         settings.banner1_image = f"/database/banner1_from_{secure_filename(file.filename)}"
                         flash('Banner 1 saved to database successfully!', 'success')
                 except Exception as e:
+                    try:
+                        app.logger.exception('Banner 1 upload failed')
+                    except Exception:
+                        pass
+                    try:
+                        db.session.rollback()
+                    except Exception:
+                        pass
                     flash(f'Banner 1 upload failed: {str(e)}', 'warning')
         
         # Handle banner 2 upload (prefer S3 if configured, otherwise store as base64 in DB)
@@ -3006,6 +3024,14 @@ def admin_settings():
                         settings.banner2_image = f"/database/banner2_from_{secure_filename(file.filename)}"
                         flash('Banner 2 saved to database successfully!', 'success')
                 except Exception as e:
+                    try:
+                        app.logger.exception('Banner 2 upload failed')
+                    except Exception:
+                        pass
+                    try:
+                        db.session.rollback()
+                    except Exception:
+                        pass
                     flash(f'Banner 2 upload failed: {str(e)}', 'warning')
         
         # Handle background upload (prefer S3 if configured, otherwise store as base64 in DB)
@@ -3047,10 +3073,18 @@ def admin_settings():
                         settings.bg_image = f"/database/bg_from_{secure_filename(file.filename)}"
                         flash('Background saved to database successfully!', 'success')
                 except Exception as e:
+                    try:
+                        app.logger.exception('Background upload failed')
+                    except Exception:
+                        pass
+                    try:
+                        db.session.rollback()
+                    except Exception:
+                        pass
                     flash(f'Background upload failed: {str(e)}', 'warning')
         
-        try:
-            # Logo size/position settings
+            try:
+                # Logo size/position settings
             try:
                 lh = request.form.get('logo_height')
                 if lh is not None:
@@ -3080,6 +3114,37 @@ def admin_settings():
             except Exception:
                 pass
             settings.updated_at = utc_now()
+            # Log settings fields and session state that may cause DB commit errors (BLOB sizes, types)
+            try:
+                app.logger.debug('Session new=%s dirty=%s deleted=%s',
+                                 len(db.session.new), len(db.session.dirty), len(db.session.deleted))
+            except Exception:
+                pass
+            # Flush to help pinpoint DB errors (flush executes SQL without committing)
+            try:
+                db.session.flush()
+            except Exception as e:
+                # Log traceback, rollback, persist to /tmp/last_error and re-raise
+                import traceback
+                tb = traceback.format_exc()
+                try:
+                    app.logger.exception('Flush failed prior to commit: %s\n%s', e, tb)
+                except Exception:
+                    print('Flush failed prior to commit:', e)
+                    print(tb)
+                try:
+                    last_err_path = '/tmp/last_error.txt'
+                    with open(last_err_path, 'w', encoding='utf-8') as fh:
+                        fh.write(f'Time: {utc_now().isoformat()}\n')
+                        fh.write(str(e) + '\n\n')
+                        fh.write(tb)
+                except Exception:
+                    pass
+                try:
+                    db.session.rollback()
+                except Exception:
+                    pass
+                raise
             # Log settings fields that may cause DB commit errors (BLOB sizes, types)
             try:
                 app.logger.debug(
