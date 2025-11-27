@@ -37,6 +37,64 @@ jobs:
         source .venv/bin/activate
         python -m pytest -q -k "not e2e and not paystack and not email"
 
+    - name: Ensure Vercel envs (set from GitHub secrets)
+      if: ${{ secrets.VERCEL_TOKEN && secrets.VERCEL_PROJECT_ID }}
+      env:
+        VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        PAYSTACK_SECRET_KEY: ${{ secrets.PAYSTACK_SECRET_KEY || '' }}
+        PAYSTACK_PUBLIC_KEY: ${{ secrets.PAYSTACK_PUBLIC_KEY || '' }}
+        MAIL_SERVER: ${{ secrets.MAIL_SERVER || '' }}
+        MAIL_PORT: ${{ secrets.MAIL_PORT || '' }}
+        MAIL_USERNAME: ${{ secrets.MAIL_USERNAME || '' }}
+        MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD || '' }}
+        MAIL_DEFAULT_SENDER: ${{ secrets.MAIL_DEFAULT_SENDER || '' }}
+        ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL || '' }}
+        SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY || '' }}
+      run: |
+        set -euo pipefail
+        # install jq if not present
+        if ! command -v jq >/dev/null 2>&1; then
+          sudo apt-get update && sudo apt-get install -y jq
+        fi
+
+        PROJECT_ID="$VERCEL_PROJECT_ID"
+        TOKEN="$VERCEL_TOKEN"
+
+        # list of env vars to sync
+        declare -A mapping
+        mapping[PAYSTACK_SECRET_KEY]="$PAYSTACK_SECRET_KEY"
+        mapping[PAYSTACK_PUBLIC_KEY]="$PAYSTACK_PUBLIC_KEY"
+        mapping[MAIL_SERVER]="$MAIL_SERVER"
+        mapping[MAIL_PORT]="$MAIL_PORT"
+        mapping[MAIL_USERNAME]="$MAIL_USERNAME"
+        mapping[MAIL_PASSWORD]="$MAIL_PASSWORD"
+        mapping[MAIL_DEFAULT_SENDER]="$MAIL_DEFAULT_SENDER"
+        mapping[ADMIN_EMAIL]="$ADMIN_EMAIL"
+        mapping[SENDGRID_API_KEY]="$SENDGRID_API_KEY"
+
+        for key in "${!mapping[@]}"; do
+          value="${mapping[$key]}"
+          if [ -z "$value" ]; then
+            echo "Skipping $key (empty)"
+            continue
+          fi
+
+          # Check for existing variable id
+          id=$(curl -s -H "Authorization: Bearer $TOKEN" "https://api.vercel.com/v8/projects/$PROJECT_ID/env" | jq -r --arg key "$key" '.env | map(select(.key==$key)) | .[0].id // empty')
+          if [ -n "$id" ]; then
+            echo "Updating existing env var $key (id=$id)"
+            curl -s -X DELETE -H "Authorization: Bearer $TOKEN" "https://api.vercel.com/v8/projects/$PROJECT_ID/env/$id"
+          else
+            echo "Adding new env var $key"
+          fi
+
+          # Create env var
+          curl -s -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+               -d "{\"key\":\"$key\",\"value\":\"$value\",\"target\":[\"production\"]}" \
+               "https://api.vercel.com/v8/projects/$PROJECT_ID/env"
+        done
+
     - name: Deploy to Vercel
       uses: amondnet/vercel-action@v20
       with:
