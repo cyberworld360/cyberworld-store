@@ -68,7 +68,8 @@ def main(argv=None):
     # Step 3: Check Python and dependencies
     print("\n🐍 Checking Python environment...")
     run_command(".venv\\Scripts\\python.exe --version", "Check Python version")
-    run_command(".venv\\Scripts\\pip.exe install -r requirements.txt", "Install Python dependencies")
+    if not args.dry_run:
+        run_command(".venv\\Scripts\\pip.exe install -r requirements.txt", "Install Python dependencies")
     
     # Step 4: Test Flask app syntax
     print("\n🧪 Testing Flask app...")
