@@ -363,17 +363,32 @@ def _ensure_settings_columns():
                 res = conn.exec_driver_sql("PRAGMA table_info(settings)")
                 cols = [r[1] for r in res.fetchall()]
 
+        # Determine dialect-specific types (sqlite uses 'BLOB' and integer for booleans)
+        dialect_name = db.engine.dialect.name
+        if dialect_name and dialect_name.startswith('postgres'):
+            blob_type = 'BYTEA'
+            bool_type = 'BOOLEAN'
+        elif dialect_name and 'mysql' in dialect_name:
+            blob_type = 'LONGBLOB'
+            bool_type = 'BOOLEAN'
+        else:
+            # Default to sqlite-friendly types
+            blob_type = 'BLOB'
+            bool_type = 'INTEGER'
+
+        app.logger.debug('Ensuring settings columns on dialect %s: blob_type=%s bool_type=%s', dialect_name, blob_type, bool_type)
+
         # List of columns that should exist
         required_cols = [
                 ('dashboard_layout', "VARCHAR(20) DEFAULT 'grid'"),
-                ('seo_visible', "BOOLEAN DEFAULT 1"),
-                ('seo_checklist_done', "BOOLEAN DEFAULT 0"),
+                ('seo_visible', f"{bool_type} DEFAULT 1"),
+                ('seo_checklist_done', f"{bool_type} DEFAULT 0"),
                 ('site_announcement', "TEXT DEFAULT ''"),
                 # Image BLOB columns for persistent storage
-                ('logo_image_data', 'BLOB'),
-                ('banner1_image_data', 'BLOB'),
-                ('banner2_image_data', 'BLOB'),
-                ('bg_image_data', 'BLOB'),
+                ('logo_image_data', blob_type),
+                ('banner1_image_data', blob_type),
+                ('banner2_image_data', blob_type),
+                ('bg_image_data', blob_type),
                 # MIME type columns
                 ("logo_image_mime", "VARCHAR(100) DEFAULT 'image/svg+xml'"),
                 ("banner1_image_mime", "VARCHAR(100) DEFAULT 'image/svg+xml'"),
@@ -396,9 +411,11 @@ def _ensure_settings_columns():
                             # For sqlite, prefer INTEGER for booleans
                             dialect_name = db.engine.dialect.name
                             defn = col_def
-                            if dialect_name == 'sqlite' and defn.upper().startswith('BOOLEAN'):
-                                # Replace BOOLEAN with INTEGER for sqlite
-                                defn = defn.replace('BOOLEAN', 'INTEGER')
+                            # Replace DB-generic types with dialect-specific types
+                            if 'BLOB' in defn:
+                                defn = defn.replace('BLOB', blob_type)
+                            if 'BOOLEAN' in defn:
+                                defn = defn.replace('BOOLEAN', bool_type)
                             conn.exec_driver_sql(f"ALTER TABLE settings ADD COLUMN {col_name} {defn}")
                             try:
                                 app.logger.info("Added missing column 'settings.%s'", col_name)
@@ -2874,11 +2891,25 @@ def admin_settings():
                         key = f"logo_{int(time.time())}_{secure_filename(file.filename)}"
                         url = upload_to_s3(file, key, mime_type=mime_type)
                         if url:
-                            settings.logo_image = url
-                            # Clear DB-stored binary if present
-                            settings.logo_image_data = None
-                            settings.logo_image_mime = mime_type
-                            flash('Logo uploaded to S3 successfully!', 'success')
+                            # Some S3 URLs may exceed DB varchar limits. If so, fallback to storing bytes
+                            if len(url) > 300:
+                                # fallback to DB storage if URL is too long to fit
+                                file.seek(0)
+                                b64_data = encode_image_to_base64(file)
+                                settings.logo_image_data = b64_data
+                                settings.logo_image_mime = mime_type
+                                settings.logo_image = f"/database/logo_from_{secure_filename(file.filename)}"
+                                try:
+                                    app.logger.warning('S3 URL too long for DB, stored logo as DB fallback len=%s', len(url))
+                                except Exception:
+                                    pass
+                                flash('Logo saved to database (fallback) due to long S3 URL', 'success')
+                            else:
+                                settings.logo_image = url
+                                # Clear DB-stored binary if present
+                                settings.logo_image_data = None
+                                settings.logo_image_mime = mime_type
+                                flash('Logo uploaded to S3 successfully!', 'success')
                         else:
                             # fallback to DB storage
                             b64_data = encode_image_to_base64(file)
@@ -2905,7 +2936,19 @@ def admin_settings():
                         key = f"banner1_{int(time.time())}_{secure_filename(file.filename)}"
                         url = upload_to_s3(file, key, mime_type=mime_type)
                         if url:
-                            settings.banner1_image = url
+                            if len(url) > 300:
+                                file.seek(0)
+                                b64_data = encode_image_to_base64(file)
+                                settings.banner1_image_data = b64_data
+                                settings.banner1_image_mime = mime_type
+                                settings.banner1_image = f"/database/banner1_from_{secure_filename(file.filename)}"
+                                try:
+                                    app.logger.warning('S3 URL too long for DB, stored banner1 as DB fallback len=%s', len(url))
+                                except Exception:
+                                    pass
+                                flash('Banner 1 saved to database (fallback) due to long S3 URL', 'success')
+                            else:
+                                settings.banner1_image = url
                             settings.banner1_image_data = None
                             settings.banner1_image_mime = mime_type
                             flash('Banner 1 uploaded to S3 successfully!', 'success')
@@ -2934,7 +2977,19 @@ def admin_settings():
                         key = f"banner2_{int(time.time())}_{secure_filename(file.filename)}"
                         url = upload_to_s3(file, key, mime_type=mime_type)
                         if url:
-                            settings.banner2_image = url
+                            if len(url) > 300:
+                                file.seek(0)
+                                b64_data = encode_image_to_base64(file)
+                                settings.banner2_image_data = b64_data
+                                settings.banner2_image_mime = mime_type
+                                settings.banner2_image = f"/database/banner2_from_{secure_filename(file.filename)}"
+                                try:
+                                    app.logger.warning('S3 URL too long for DB, stored banner2 as DB fallback len=%s', len(url))
+                                except Exception:
+                                    pass
+                                flash('Banner 2 saved to database (fallback) due to long S3 URL', 'success')
+                            else:
+                                settings.banner2_image = url
                             settings.banner2_image_data = None
                             settings.banner2_image_mime = mime_type
                             flash('Banner 2 uploaded to S3 successfully!', 'success')
@@ -2963,7 +3018,19 @@ def admin_settings():
                         key = f"bg_{int(time.time())}_{secure_filename(file.filename)}"
                         url = upload_to_s3(file, key, mime_type=mime_type)
                         if url:
-                            settings.bg_image = url
+                            if len(url) > 300:
+                                file.seek(0)
+                                b64_data = encode_image_to_base64(file)
+                                settings.bg_image_data = b64_data
+                                settings.bg_image_mime = mime_type
+                                settings.bg_image = f"/database/bg_from_{secure_filename(file.filename)}"
+                                try:
+                                    app.logger.warning('S3 URL too long for DB, stored bg as DB fallback len=%s', len(url))
+                                except Exception:
+                                    pass
+                                flash('Background saved to database (fallback) due to long S3 URL', 'success')
+                            else:
+                                settings.bg_image = url
                             settings.bg_image_data = None
                             settings.bg_image_mime = mime_type
                             flash('Background uploaded to S3 successfully!', 'success')
@@ -3013,10 +3080,38 @@ def admin_settings():
             except Exception:
                 pass
             settings.updated_at = utc_now()
+            # Log settings fields that may cause DB commit errors (BLOB sizes, types)
+            try:
+                app.logger.debug(
+                    'Saving settings values: logo_image_len=%s logo_image_data_len=%s logo_image_mime=%s banner1_image_len=%s banner1_image_data_len=%s',
+                    len(settings.logo_image or ''), len(settings.logo_image_data or b''), settings.logo_image_mime,
+                    len(settings.banner1_image or ''), len(settings.banner1_image_data or b''))
+            except Exception:
+                pass
             db.session.commit()
             flash('Settings saved successfully!', 'success')
         except Exception as e:
             db.session.rollback()
+            # Log full traceback for debugging
+            import traceback
+            tb = traceback.format_exc()
+            try:
+                app.logger.exception('Error saving settings: %s\n%s', e, tb)
+            except Exception:
+                try:
+                    print('Error saving settings:', e)
+                    print(tb)
+                except Exception:
+                    pass
+            # Persist last traceback for ease of debugging on serverless hosts
+            try:
+                last_err_path = '/tmp/last_error.txt'
+                with open(last_err_path, 'w', encoding='utf-8') as fh:
+                    fh.write(f"Time: {utc_now().isoformat()}\n")
+                    fh.write(str(e) + '\n\n')
+                    fh.write(tb)
+            except Exception:
+                pass
             flash(f'Error saving settings: {str(e)}', 'danger')
     
     return render_template('admin_settings.html', settings=settings)
