@@ -43,3 +43,29 @@ CI / deployment:
   - For a non-interactive deploy locally, set `VERCEL_TOKEN` in your environment and run:
     python .venv\Scripts\python.exe deploy_vercel.py --non-interactive
 
+Setting Vercel Environment Variables (Paystack / SMTP keys)
+  - The repository includes helper scripts in `./scripts/` to set Vercel env vars from your local `.env` file. These scripts will read variables from `.env` and add them to your Vercel project in the production environment.
+
+  PowerShell (Windows):
+  ```powershell
+  # Use your Vercel token (do not commit it) and your Vercel Project ID
+  $env:VERCEL_TOKEN = 'your_token'
+  .\scripts\set_vercel_envs.ps1 -ProjectId 'your-project-id'
+  ```
+
+  Bash (macOS / Linux):
+  ```bash
+  export VERCEL_TOKEN=your_token
+  ./scripts/set_vercel_envs.sh your-project-id
+  ```
+
+  - The script will attempt to add each non-empty variable from `.env` to the production environment of the specified Vercel project. It skips variables named `VERCEL_TOKEN` and variables with empty values.
+  - Verify the variables were added via the Vercel dashboard or CLI:
+  ```bash
+  vercel env ls your-project-id --token $VERCEL_TOKEN
+  ```
+
+Security reminder:
+  - Do not commit `.env` with live credentials to the repo.
+  - Use GitHub Secrets and the deploy workflow to enable safe automated deployments from CI.
+
