@@ -23,8 +23,13 @@ def run_command(cmd, description):
     print(f"✅ Success: {description}")
     return True
 
-def main():
+def main(argv=None):
     base_dir = Path(__file__).parent
+    import argparse
+    parser = argparse.ArgumentParser(description='Deploy to Vercel')
+    parser.add_argument('--dry-run', action='store_true', help='Prepare deploy but do not execute vercel')
+    parser.add_argument('--non-interactive', action='store_true', help='Use VERCEL_TOKEN for non-interactive deploy')
+    args = parser.parse_args(argv or None)
     
     print("""
 ╔═══════════════════════════════════════════════════════════╗
@@ -41,17 +46,16 @@ def main():
     
     # Step 1: Check Node.js and Vercel CLI
     print("\n🔍 Checking prerequisites...")
-    
-    if not run_command("node --version", "Check Node.js"):
-        print("⚠️  Node.js not found. Please install from https://nodejs.org")
-        return False
-    
-    if not run_command("npm --version", "Check npm"):
-        print("⚠️  npm not found")
-        return False
-    
-    # Install Vercel CLI if not present
-    run_command("npm install -g vercel", "Install Vercel CLI")
+    # In dry-run mode, skip node/npm checks: we only want to validate steps
+    if not args.dry_run:
+        if not run_command("node --version", "Check Node.js"):
+            print("⚠️  Node.js not found. Please install from https://nodejs.org")
+            return False
+        if not run_command("npm --version", "Check npm"):
+            print("⚠️  npm not found")
+            return False
+        # Install Vercel CLI if not present
+        run_command("npm install -g vercel", "Install Vercel CLI")
     
     # Step 2: Validate local environment
     print("\n🔍 Validating configuration...")
@@ -101,11 +105,19 @@ def main():
     
     # If a VERCEL_TOKEN is provided, run non-interactively using it (CI friendly)
     vercel_token = os.environ.get('VERCEL_TOKEN') or os.environ.get('VERCEL_TOKEN'.upper())
-    if vercel_token:
+    if vercel_token or args.non_interactive:
         # Use the token to run vercel without an interactive login.
-        deploy_cmd = f"vercel --prod --token {vercel_token} {env_args} --confirm"
+        token = vercel_token or os.environ.get('VERCEL_TOKEN')
+        if token:
+            deploy_cmd = f"vercel --prod --token {token} {env_args} --confirm"
+        else:
+            print('VERCEL_TOKEN is not set; non-interactive deploy requested but token missing')
+            return False
     else:
         deploy_cmd = f"vercel --prod {env_args}"
+    if args.dry_run:
+        print(f"DRY RUN: Would execute: {deploy_cmd}")
+        return True
     if not run_command(deploy_cmd, "Deploy to Vercel"):
         print("\n⚠️  Deployment may have issues. Check your Vercel account.")
         print("Manual deployment: https://vercel.com/new")
