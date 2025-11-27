@@ -312,6 +312,11 @@
                     </div>
                 </div>
                 <div class="form-group">
+                    <label for="custom_css">Custom CSS (admin override)</label>
+                    <textarea id="custom_css" name="custom_css" rows="6" placeholder="Enter CSS overrides here (e.g., .logo-img { height: 60px; } )">{{ settings.custom_css }}</textarea>
+                    <small>Careful: invalid CSS can break the layout. Add small overrides only.</small>
+                </div>
+                <div class="form-group">
                     <label for="logo_height">Logo height (px)</label>
                     <input type="number" id="logo_height" name="logo_height" value="{{ settings.logo_height }}" min="8" max="300" />
                     <small>Set the logo height in pixels (e.g., 48).</small>

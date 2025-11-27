@@ -362,9 +362,9 @@ def _ensure_settings_columns():
             with db.engine.connect() as conn:
                 res = conn.exec_driver_sql("PRAGMA table_info(settings)")
                 cols = [r[1] for r in res.fetchall()]
-            
-            # List of columns that should exist
-            required_cols = [
+
+        # List of columns that should exist
+        required_cols = [
                 ('dashboard_layout', "VARCHAR(20) DEFAULT 'grid'"),
                 ('seo_visible', "BOOLEAN DEFAULT 1"),
                 ('seo_checklist_done', "BOOLEAN DEFAULT 0"),
@@ -384,19 +384,31 @@ def _ensure_settings_columns():
                 ('logo_top_px', 'INTEGER DEFAULT 0'),
                 ('logo_zindex', 'INTEGER DEFAULT 9999'),
                 ('cart_on_right', 'BOOLEAN DEFAULT 1'),
+                ('custom_css', "TEXT DEFAULT ''"),
             ]
             
             # Add missing columns
-            with db.engine.connect() as conn:
+        # Add missing columns
+        with db.engine.connect() as conn:
                 for col_name, col_def in required_cols:
                     if col_name not in cols:
                         try:
-                            # Use ALTER TABLE to add the missing column.
-                            # Most DBs (SQLite, Postgres, MySQL) accept this form.
-                            conn.exec_driver_sql(f"ALTER TABLE settings ADD COLUMN {col_name} {col_def}")
-                            print(f"Added missing column 'settings.{col_name}'")
+                            # For sqlite, prefer INTEGER for booleans
+                            dialect_name = db.engine.dialect.name
+                            defn = col_def
+                            if dialect_name == 'sqlite' and defn.upper().startswith('BOOLEAN'):
+                                # Replace BOOLEAN with INTEGER for sqlite
+                                defn = defn.replace('BOOLEAN', 'INTEGER')
+                            conn.exec_driver_sql(f"ALTER TABLE settings ADD COLUMN {col_name} {defn}")
+                            try:
+                                app.logger.info("Added missing column 'settings.%s'", col_name)
+                            except Exception:
+                                print(f"Added missing column 'settings.{col_name}'")
                         except Exception as e:
-                            print(f"Could not add column {col_name}: {e}")
+                            try:
+                                app.logger.warning('Could not add column %s: %s', col_name, e)
+                            except Exception:
+                                print(f"Could not add column {col_name}: {e}")
     except Exception as e:
         print(f"Could not ensure Settings columns: {e}")
 
@@ -515,6 +527,9 @@ class AdminUser(UserMixin, db.Model):
     def is_admin(self):
         """Explicit admin indicator for permission checks."""
         return True
+    def get_id(self):
+        # Prefix with class name so Flask-Login user IDs don't collide across tables
+        return f"AdminUser:{self.id}"
 
 class User(UserMixin, db.Model):
     """Customer user account for wallet and order history"""
@@ -536,6 +551,8 @@ class User(UserMixin, db.Model):
     def is_admin(self):
         """Non-admin customer user."""
         return False
+    def get_id(self):
+        return f"User:{self.id}"
 
 class Wallet(db.Model):
     """User wallet for storing balance"""
@@ -680,10 +697,9 @@ class Settings(db.Model):
     logo_zindex = db.Column(db.Integer, default=9999)
     # Place cart on right side of header when True (opposite hamburger left)
     cart_on_right = db.Column(db.Boolean, default=True)
+    # Custom CSS to allow admin to inject site-wide CSS overrides
+    custom_css = db.Column(db.Text, default='')
     # Logo size and position controls
-    logo_height = db.Column(db.Integer, default=48)
-    logo_top_px = db.Column(db.Integer, default=0)
-    logo_zindex = db.Column(db.Integer, default=9999)
     updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now)
 
     def get_logo_url(self):
@@ -725,15 +741,31 @@ class FailedEmail(db.Model):
 def load_user(user_id):
     """Load user from session - tries AdminUser first, then User (customer)"""
     try:
-        user_id = int(user_id)
-        # Try to load as AdminUser first
-        admin = AdminUser.query.get(user_id)
-        if admin:
-            return admin
-        # If not admin, try as customer User
-        customer = User.query.get(user_id)
-        if customer:
-            return customer
+        # Support get_id() prefixed values like 'AdminUser:1' or 'User:1'
+        if isinstance(user_id, str) and ':' in user_id:
+            kind, rawid = user_id.split(':', 1)
+            try:
+                rawid = int(rawid)
+            except Exception:
+                rawid = None
+            if kind == 'AdminUser' and rawid:
+                return AdminUser.query.get(rawid)
+            elif kind == 'User' and rawid:
+                return User.query.get(rawid)
+        else:
+            # Legacy numeric-only id: check AdminUser then User
+            uid = None
+            try:
+                uid = int(user_id)
+            except Exception:
+                pass
+            if uid is not None:
+                admin = AdminUser.query.get(uid)
+                if admin:
+                    return admin
+                customer = User.query.get(uid)
+                if customer:
+                    return customer
     except Exception:
         pass
     return None
@@ -817,6 +849,11 @@ def upload_to_s3(file_obj, key, mime_type=None):
 def get_settings():
     """Get site settings, create defaults if not exist"""
     try:
+        # Ensure DB has required settings columns before reading (helps older schemas)
+        try:
+            _ensure_settings_columns()
+        except Exception:
+            pass
         settings = Settings.query.first()
     except Exception as e:
         # Database schema may be older (missing new Settings columns). Return
@@ -1301,10 +1338,6 @@ def initdb_command():
                 {"title":"Phone Screen Protector Pack (5)", "short":"Tempered glass, all popular phone models", "price_ghc":45.00, "old_price_ghc":75.00, "image":"/static/images/placeholder.png", "featured":False},
                 {"title":"HDMI 2.1 Cable 2m", "short":"Supports 8K resolution, high bandwidth", "price_ghc":65.00, "old_price_ghc":100.00, "image":"/static/images/placeholder.png", "featured":False},
                 {"title":"Gaming Headset RGB", "short":"Surround sound, RGB lighting, noise isolation", "price_ghc":320.00, "old_price_ghc":450.00, "image":"/static/images/placeholder.png", "featured":True},
-                # logo size/position
-                ('logo_height', 'INTEGER DEFAULT 48'),
-                ('logo_top_px', 'INTEGER DEFAULT 0'),
-                ('logo_zindex', 'INTEGER DEFAULT 9999'),
             ]
             for s in sample:
                 try:
@@ -1363,6 +1396,9 @@ def view_cart():
         items.append({"product": p, "qty": qty, "subtotal": subtotal})
         total += subtotal
     return render_template("cart.html", items=items, total=total)
+
+
+
 
 @app.route("/cart/add/<int:pid>", methods=["POST"])
 def cart_add(pid):
@@ -2119,6 +2155,22 @@ def admin_diag():
         "settings_present": settings_present
     }
     return jsonify(data), 200
+
+
+@app.route('/api/cart-count')
+def api_cart_count():
+    """Return JSON with cart count for the current session (sum of quantities)."""
+    cart = session.get('cart', {}) or {}
+    count = 0
+    try:
+        for pid_str, qty in cart.items():
+            try:
+                count += int(qty)
+            except Exception:
+                pass
+    except Exception:
+        count = 0
+    return jsonify({'count': count}), 200
 
 
 @app.route('/admin/diag-env')
@@ -2951,8 +3003,13 @@ def admin_settings():
             except Exception:
                 pass
             try:
-                # Cart alignment: checked when 'cart_on_right' present
+                # Cart alignment: checkbox value; presence means checked
                 settings.cart_on_right = bool(request.form.get('cart_on_right'))
+            except Exception:
+                pass
+            try:
+                if 'custom_css' in request.form:
+                    settings.custom_css = request.form.get('custom_css') or ''
             except Exception:
                 pass
             settings.updated_at = utc_now()
@@ -3008,6 +3065,7 @@ def admin_settings_api():
                 'logo_top_px': settings.logo_top_px,
                 'logo_zindex': settings.logo_zindex
                 ,'cart_on_right': settings.cart_on_right
+                ,'custom_css': settings.custom_css
             }
         }), 200
 
@@ -3026,6 +3084,8 @@ def admin_settings_api():
             settings.secondary_font = data.get('secondary_font')
         if 'dashboard_layout' in data:
             settings.dashboard_layout = data.get('dashboard_layout')
+        if 'custom_css' in data:
+            settings.custom_css = data.get('custom_css') or ''
         if 'cart_on_right' in data:
             settings.cart_on_right = bool(data.get('cart_on_right'))
         if 'seo_visible' in data:

@@ -1,0 +1,40 @@
+name: Pytest (CI)
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m venv .venv
+        source .venv/bin/activate
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Run tests (fast subset)
+      env:
+        DATABASE_URL: sqlite:///./data.db
+        FORCE_EPHEMERAL: '1'
+        MAIL_SERVER: ''
+        MAIL_USERNAME: ''
+        MAIL_PASSWORD: ''
+        PAYSTACK_PUBLIC: ''
+        PAYSTACK_SECRET: ''
+        SENDGRID_API_KEY: ''
+      run: |
+        source .venv/bin/activate
+        python -m pytest -q -k "not e2e and not paystack and not email"
