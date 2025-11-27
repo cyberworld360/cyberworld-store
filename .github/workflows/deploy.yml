@@ -72,6 +72,7 @@ jobs:
         mapping[MAIL_DEFAULT_SENDER]="$MAIL_DEFAULT_SENDER"
         mapping[ADMIN_EMAIL]="$ADMIN_EMAIL"
         mapping[SENDGRID_API_KEY]="$SENDGRID_API_KEY"
+        mapping[ERROR_VIEW_TOKEN]="$ERROR_VIEW_TOKEN"
 
         for key in "${!mapping[@]}"; do
           value="${mapping[$key]}"
@@ -104,3 +105,16 @@ jobs:
         vercel-args: '--prod'
       env:
         VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+    - name: Run DB migrations (optional)
+      if: ${{ secrets.DATABASE_URL }}
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        FLASK_APP: app.py
+      run: |
+        set -euo pipefail
+        echo "Running alembic/Flask-Migrate upgrade..."
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        export SQLALCHEMY_DATABASE_URI="$DATABASE_URL"
+        python -m flask db upgrade
