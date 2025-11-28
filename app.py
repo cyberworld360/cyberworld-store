@@ -882,6 +882,21 @@ def get_settings():
             app.logger.warning("Could not query Settings (db schema mismatch): %s", e)
         except Exception:
             pass
+        # Persist last traceback for easier debugging in serverless/production
+        try:
+            import traceback
+            tb = traceback.format_exc()
+            last_err_path = '/tmp/last_error.txt'
+            with open(last_err_path, 'w', encoding='utf-8') as fh:
+                fh.write(f"Time: {utc_now().isoformat()}\n")
+                fh.write(str(e) + '\n\n')
+                fh.write(tb)
+        except Exception:
+            # If we can't persist to /tmp, do not crash the app
+            try:
+                app.logger.exception('Failed to write last_error file')
+            except Exception:
+                pass
         return Settings()
 
     if not settings:
@@ -2317,19 +2332,26 @@ def admin_login():
         pass
     
     if request.method == 'POST':
-        username = request.form.get('username', '').strip()
-        password = request.form.get('password', '').strip()
+        try:
+            username = request.form.get('username', '').strip()
+            password = request.form.get('password', '').strip()
         
-        if not username or not password:
-            flash('Username and password are required.', 'danger')
-            return render_template('admin_login.html')
-        
-        user = AdminUser.query.filter_by(username=username).first()
-        if user and user.check_password(password):
-            login_user(user)
-            flash('Logged in as admin.', 'success')
-            return redirect(url_for('admin_index'))
-        flash('Invalid admin credentials.', 'danger')
+            if not username or not password:
+                flash('Username and password are required.', 'danger')
+                return render_template('admin_login.html')
+            
+            user = AdminUser.query.filter_by(username=username).first()
+            if user and user.check_password(password):
+                login_user(user)
+                flash('Logged in as admin.', 'success')
+                return redirect(url_for('admin_index'))
+            flash('Invalid admin credentials.', 'danger')
+        except Exception as e:
+            try:
+                app.logger.exception('Admin login error: %s', e)
+            except Exception:
+                print('Admin login exception:', e)
+            flash('Internal server error during admin login.', 'danger')
     return render_template('admin_login.html')
 
 @app.route('/admin/logout')
@@ -2370,7 +2392,33 @@ def register():
             flash('Registration successful! Please login.', 'success')
             return redirect(url_for('user_login'))
         except Exception as e:
-            db.session.rollback()
+            # Capture DB error during commit (if any), and persist details
+            import traceback
+            tb = traceback.format_exc()
+            try:
+                app.logger.exception('Error saving settings during commit: %s\n%s', e, tb)
+            except Exception:
+                try:
+                    print('Error saving settings during commit:', e)
+                    print(tb)
+                except Exception:
+                    pass
+            try:
+                last_err_path = '/tmp/last_error.txt'
+                with open(last_err_path, 'w', encoding='utf-8') as fh:
+                    fh.write(f"Time: {utc_now().isoformat()}\n")
+                    fh.write(str(e) + '\n\n')
+                    fh.write(tb)
+            except Exception:
+                pass
+            try:
+                # Attempt a rollback to ensure session isn't left in a failed state
+                db.session.rollback()
+            except Exception:
+                try:
+                    app.logger.exception('Rollback after commit failure also failed')
+                except Exception:
+                    pass
             flash(f'Registration error: {str(e)}', 'danger')
     return render_template('register.html')
 
@@ -3083,8 +3131,7 @@ def admin_settings():
                         pass
                     flash(f'Background upload failed: {str(e)}', 'warning')
         
-            try:
-                # Logo size/position settings
+            # Logo size/position settings
             try:
                 lh = request.form.get('logo_height')
                 if lh is not None:
@@ -3153,31 +3200,37 @@ def admin_settings():
                     len(settings.banner1_image or ''), len(settings.banner1_image_data or b''))
             except Exception:
                 pass
-            db.session.commit()
-            flash('Settings saved successfully!', 'success')
-        except Exception as e:
-            db.session.rollback()
-            # Log full traceback for debugging
-            import traceback
-            tb = traceback.format_exc()
             try:
-                app.logger.exception('Error saving settings: %s\n%s', e, tb)
-            except Exception:
+                db.session.commit()
+                flash('Settings saved successfully!', 'success')
+            except Exception as e_local:
+                db.session.rollback()
+                # Log full traceback for debugging
+                import traceback
+                tb = traceback.format_exc()
                 try:
-                    print('Error saving settings:', e)
-                    print(tb)
+                    app.logger.exception('Error saving settings: %s\n%s', e_local, tb)
+                except Exception:
+                    try:
+                        print('Error saving settings:', e_local)
+                        print(tb)
+                    except Exception:
+                        pass
+                # Persist last traceback for ease of debugging on serverless hosts
+                try:
+                    last_err_path = '/tmp/last_error.txt'
+                    with open(last_err_path, 'w', encoding='utf-8') as fh:
+                        fh.write(f"Time: {utc_now().isoformat()}\n")
+                        fh.write(str(e_local) + '\n\n')
+                        fh.write(tb)
                 except Exception:
                     pass
-            # Persist last traceback for ease of debugging on serverless hosts
-            try:
-                last_err_path = '/tmp/last_error.txt'
-                with open(last_err_path, 'w', encoding='utf-8') as fh:
-                    fh.write(f"Time: {utc_now().isoformat()}\n")
-                    fh.write(str(e) + '\n\n')
-                    fh.write(tb)
-            except Exception:
-                pass
-            flash(f'Error saving settings: {str(e)}', 'danger')
+                # Safely derive a short error message for the user without assuming `e_local` is available
+                try:
+                    err_msg = str(e_local) if 'e_local' in locals() else 'An internal error occurred'
+                except Exception:
+                    err_msg = 'An internal error occurred'
+                flash(f'Error saving settings: {err_msg}', 'danger')
     
     return render_template('admin_settings.html', settings=settings)
 
@@ -3277,6 +3330,20 @@ def admin_settings_api():
                 pass
 
         settings.updated_at = utc_now()
+        try:
+            db.session.flush()
+        except Exception as e:
+            import traceback
+            tb = traceback.format_exc()
+            try:
+                app.logger.exception('Flush failed in admin_settings_api: %s\n%s', e, tb)
+            except Exception:
+                pass
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
+            return jsonify({'status': 'error', 'message': str(e)}), 500
         db.session.commit()
 
         return jsonify({
