@@ -13,8 +13,9 @@ def set_test_env(monkeypatch):
     monkeypatch.setenv('MAIL_USERNAME', '')
     monkeypatch.setenv('MAIL_PASSWORD', '')
     monkeypatch.setenv('REDIS_URL', '')
-    monkeypatch.setenv('PAYSTACK_PUBLIC', '')
-    monkeypatch.setenv('PAYSTACK_SECRET', '')
+    # Set PAYSTACK_* to dummy non-empty values for tests that expect the keys to be present
+    monkeypatch.setenv('PAYSTACK_PUBLIC', 'test_public')
+    monkeypatch.setenv('PAYSTACK_SECRET', 'test_secret')
     monkeypatch.setenv('SENDGRID_API_KEY', '')
     # Optional flags
     monkeypatch.setenv('FLASK_ENV', 'testing')
@@ -56,6 +57,11 @@ def no_network(monkeypatch):
 
         def json(self):
             return self._json
+        def raise_for_status(self):
+            # Mimic requests.Response.raise_for_status()
+            if self.status_code >= 400:
+                raise Exception(f"HTTP {self.status_code} error: {self.text}")
+            return None
 
     def fake_post(url, *args, **kwargs):
         # Paystack POST initialize

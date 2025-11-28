@@ -768,9 +768,9 @@ def load_user(user_id):
             except Exception:
                 rawid = None
             if kind == 'AdminUser' and rawid:
-                return AdminUser.query.get(rawid)
+                return db.session.get(AdminUser, rawid)
             elif kind == 'User' and rawid:
-                return User.query.get(rawid)
+                return db.session.get(User, rawid)
         else:
             # Legacy numeric-only id: check AdminUser then User
             uid = None
@@ -779,10 +779,10 @@ def load_user(user_id):
             except Exception:
                 pass
             if uid is not None:
-                admin = AdminUser.query.get(uid)
+                admin = db.session.get(AdminUser, uid)
                 if admin:
                     return admin
-                customer = User.query.get(uid)
+                customer = db.session.get(User, uid)
                 if customer:
                     return customer
     except Exception:
@@ -1423,7 +1423,7 @@ def view_cart():
             pid = int(pid_str); qty = int(qty)
         except Exception:
             continue
-        p = Product.query.get(pid)
+        p = db.session.get(Product, pid)
         if not p:
             continue
         subtotal = Decimal(p.price_ghc) * qty
@@ -1485,7 +1485,7 @@ def paystack_init():
     items = []
     for pid_str, qty in cart.items():
         pid = int(pid_str); qty = int(qty)
-        p = Product.query.get(pid)
+        p = db.session.get(Product, pid)
         if not p: continue
         subtotal = Decimal(p.price_ghc) * qty
         total += subtotal
@@ -1502,7 +1502,7 @@ def paystack_init():
     applied_coupon = None
     if coupon_id:
         try:
-            coupon = Coupon.query.get(int(coupon_id))
+            coupon = db.session.get(Coupon, int(coupon_id))
             if coupon:
                 valid, msg = coupon.is_valid()
                 if valid:
@@ -1580,7 +1580,7 @@ def paystack_init_url():
     items = []
     for pid_str, qty in cart.items():
         pid = int(pid_str); qty = int(qty)
-        p = Product.query.get(pid)
+        p = db.session.get(Product, pid)
         if not p: continue
         subtotal = Decimal(p.price_ghc) * qty
         total += subtotal
@@ -1594,7 +1594,7 @@ def paystack_init_url():
     discount = Decimal('0')
     if coupon_id:
         try:
-            coupon = Coupon.query.get(int(coupon_id))
+            coupon = db.session.get(Coupon, int(coupon_id))
             if coupon:
                 valid, msg = coupon.is_valid()
                 if valid and total >= Decimal(str(coupon.min_amount)):
@@ -1656,7 +1656,7 @@ def wallet_payment():
     items = []
     for pid_str, qty in cart.items():
         pid = int(pid_str); qty = int(qty)
-        p = Product.query.get(pid)
+        p = db.session.get(Product, pid)
         if not p: continue
         subtotal = Decimal(p.price_ghc) * qty
         total += subtotal
@@ -1679,7 +1679,7 @@ def wallet_payment():
     applied_coupon = None
     if coupon_id:
         try:
-            coupon = Coupon.query.get(int(coupon_id))
+            coupon = db.session.get(Coupon, int(coupon_id))
             if coupon:
                 valid, msg = coupon.is_valid()
                 if valid:
@@ -1771,7 +1771,7 @@ def wallet_payment():
                     item_dict = dict(it)
                     # Get product to fetch image_path
                     if it.get('product_id'):
-                        p = Product.query.get(it.get('product_id'))
+                        p = db.session.get(Product, it.get('product_id'))
                         if p:
                             item_dict['image_path'] = p.image if p.image else ''
                     items_with_images.append(item_dict)
@@ -1825,7 +1825,7 @@ def wallet_payment():
             for it in items:
                 item_dict = dict(it)
                 if it.get('product_id'):
-                    p = Product.query.get(it.get('product_id'))
+                    p = db.session.get(Product, it.get('product_id'))
                     if p:
                         item_dict['image_path'] = p.image if p.image else ''
                 items_with_images.append(item_dict)
@@ -1911,7 +1911,7 @@ def paystack_callback():
                     for it in items:
                         item_dict = dict(it)
                         if it.get('product_id'):
-                            p = Product.query.get(it.get('product_id'))
+                            p = db.session.get(Product, it.get('product_id'))
                             if p:
                                 item_dict['image_path'] = p.image if p.image else ''
                         items_with_images.append(item_dict)
@@ -1964,7 +1964,7 @@ def paystack_callback():
                 for it in items:
                     item_dict = dict(it)
                     if it.get('product_id'):
-                        p = Product.query.get(it.get('product_id'))
+                        p = db.session.get(Product, it.get('product_id'))
                         if p:
                             item_dict['image_path'] = p.image if p.image else ''
                     items_with_images.append(item_dict)
@@ -2076,7 +2076,7 @@ def paystack_callback():
                 try:
                     coupon_id = pending.get('coupon_id')
                     if coupon_id:
-                        c = Coupon.query.get(int(coupon_id))
+                        c = db.session.get(Coupon, int(coupon_id))
                         if c:
                             c.current_uses = (c.current_uses or 0) + 1
                 except Exception:
@@ -2261,7 +2261,7 @@ def checkout():
     items = []; total = Decimal('0')
     for pid_str, qty in cart.items():
         pid = int(pid_str); qty = int(qty)
-        p = Product.query.get(pid)
+        p = db.session.get(Product, pid)
         if not p: continue
         subtotal = Decimal(p.price_ghc) * qty
         items.append({"product": p, "qty": qty, "subtotal": subtotal})
@@ -2732,7 +2732,7 @@ def admin_order_update_status(oid):
                         'subtotal': float(oi.subtotal)
                     }
                     if oi.product_id:
-                        p = Product.query.get(oi.product_id)
+                        p = db.session.get(Product, oi.product_id)
                         if p:
                             item_dict['image_path'] = p.image if p.image else ''
                     items_with_images.append(item_dict)
@@ -3526,7 +3526,7 @@ def admin_slider_new():
             )
             
             for pid in product_ids:
-                product = Product.query.get(int(pid))
+                product = db.session.get(Product, int(pid))
                 if product:
                     slider.products.append(product)
             
@@ -3561,7 +3561,7 @@ def admin_slider_edit(sid):
         try:
             slider.products.clear()
             for pid in product_ids:
-                product = Product.query.get(int(pid))
+                product = db.session.get(Product, int(pid))
                 if product:
                     slider.products.append(product)
             
