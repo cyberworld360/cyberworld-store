@@ -83,7 +83,9 @@ def main(argv=None):
     run_command("git status", "Check git status")
     run_command("git add -A", "Stage all changes")
     run_command('git commit -m "chore: Prepare for Vercel deployment" || true', "Commit changes")
-    run_command("git push origin main", "Push to GitHub")
+    # Push current branch to origin instead of forcing 'main'
+    # This avoids modifying main and respects feature branches/PRs.
+    run_command("git rev-parse --abbrev-ref HEAD > .current_branch.tmp && git push origin $(cat .current_branch.tmp) && rm .current_branch.tmp", "Push current branch to GitHub")
     
     # Step 7: Vercel login (interactive)
     print("\n🔐 Vercel authentication...")
