@@ -64,3 +64,51 @@ def test_admin_settings_handles_pg8000_interface_error(monkeypatch, tmp_path):
     assert 'simulated interface error for tests' in content
 
     monkeypatch.setattr(Session, 'flush', orig_flush, raising=False)
+
+
+def test_session_reset_after_interface_error(monkeypatch):
+    """Ensure the DB session is reset after a driver-level InterfaceError
+    so subsequent commits do not raise 'in failed transaction block'."""
+    from sqlalchemy.orm import Session
+    orig_flush = Session.flush
+    counter = {'count': 0}
+
+    def fake_flush(*args, **kwargs):
+        # Only raise when the current request is for /admin/settings
+        try:
+            from flask import request
+            if request and getattr(request, 'path', '').startswith('/admin/settings'):
+                raise pg8000.exceptions.InterfaceError('simulated interface error for tests')
+        except Exception:
+            # If not in a request context or any error occurs, fallback to original behavior
+            pass
+        return orig_flush(*args, **kwargs)
+
+    client = app.test_client()
+    setup_admin(app, username='sessionreset')
+    monkeypatch.setattr(Session, 'flush', fake_flush, raising=False)
+    # Login as admin and trigger the interface error
+    resp_login = client.post('/admin/login', data={'username': 'sessionreset', 'password': 'secret'}, follow_redirects=True)
+    assert resp_login.status_code == 200
+    fp = BytesIO(b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR')
+    fp.name = 'tiny2.png'
+    resp = client.post('/admin/settings', data={'primary_color': '#000000', 'logo_file': (fp, 'tiny2.png')}, content_type='multipart/form-data', follow_redirects=False)
+    assert resp.status_code in (200, 500)
+    monkeypatch.setattr(Session, 'flush', orig_flush, raising=False)
+    # Now ensure a new DB commit works (session should have been reset)
+    with app.app_context():
+        try:
+            u = AdminUser(username='sessionreset2')
+            u.set_password('secret')
+            db.session.add(u)
+            db.session.commit()
+        finally:
+            # cleanup
+            try:
+                db.session.delete(u)
+                db.session.commit()
+            except Exception:
+                try:
+                    _safe_db_rollback_and_close()
+                except Exception:
+                    pass

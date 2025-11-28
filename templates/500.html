@@ -9,5 +9,11 @@
     {{ error }}
   </details>
   {% endif %}
+  {% if show_last_err_instructions %}
+  <div style="margin-top:10px;font-size:12px;color:#666;">
+    Admins: If you are an authorized operator, you can fetch the full persisted traceback from the server's temporary file using the secure endpoint <code>/__last_error</code> with the environment token (see deployment docs).
+    Example: <code>curl -H "X-ERROR-TOKEN: &lt;token&gt;" https://your-site/__last_error</code>
+  </div>
+  {% endif %}
 </div>
 {% endblock %}

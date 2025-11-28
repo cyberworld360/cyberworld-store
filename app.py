@@ -440,8 +440,13 @@ def handle_internal_server_error(e):
     try:
         app.logger.error("Unhandled exception: %s\n%s", e, tb)
     except Exception:
-        print("[500 error]", e)
-        print(tb)
+        # Logger may be unavailable in some environments; write to stderr as a safe fallback
+        try:
+            import sys
+            sys.stderr.write(f"[500 error] {e}\n")
+            sys.stderr.write(tb + "\n")
+        except Exception:
+            pass
     # Return a friendly error page while logging details
     # Persist last traceback to a temporary file (serverless writable path)
     try:
@@ -456,8 +461,19 @@ def handle_internal_server_error(e):
         except Exception:
             pass
 
+    # Clear any failed DB transaction state to prevent subsequent 'in failed transaction block' errors
     try:
-        return render_template('500.html', error=str(e)), 500
+        _safe_db_rollback_and_close()
+    except Exception:
+        pass
+
+    try:
+        # When debugging, show the full traceback in the 500 page for easier local debugging.
+        # In production (app.debug is False), avoid exposing full tracebacks to users; use the short message.
+        err_to_show = tb if getattr(app, 'debug', False) else None
+        # If a secure token is configured, show a hint so admins can fetch the persisted traceback via /__last_error
+        show_last_err_instructions = bool(os.environ.get('ERROR_VIEW_TOKEN'))
+        return render_template('500.html', error=err_to_show or str(e), show_last_err_instructions=show_last_err_instructions), 500
     except Exception:
         return ("Internal Server Error", 500)
 
@@ -715,7 +731,8 @@ class Settings(db.Model):
     logo_top_px = db.Column(db.Integer, default=0)
     logo_zindex = db.Column(db.Integer, default=9999)
     # Place cart on right side of header when True (opposite hamburger left)
-    cart_on_right = db.Column(db.Boolean, default=True)
+    # Default changed to False to swap the cart and hamburger menu positions by default
+    cart_on_right = db.Column(db.Boolean, default=False)
     # Custom CSS to allow admin to inject site-wide CSS overrides
     custom_css = db.Column(db.Text, default='')
     # Logo size and position controls
@@ -824,6 +841,31 @@ def decode_image_from_base64(b64_data, mime_type='image/jpeg'):
     return f"data:{mime_type};base64,{b64_str}"
 
 
+def _safe_db_rollback_and_close():
+        """Safely rollback and close the DB session to clear transaction state.
+
+        Use sparingly when encountering DB driver errors to ensure the SQLAlchemy
+        session is reset and subsequent requests or operations do not stay in a
+        failed transaction state (which triggers 'in failed transaction block').
+        """
+        try:
+            db.session.rollback()
+        except Exception:
+            try:
+                import sys
+                sys.stderr.write("db.session.rollback() failed\n")
+            except Exception:
+                pass
+        try:
+            db.session.close()
+        except Exception:
+            try:
+                import sys
+                sys.stderr.write("db.session.close() failed\n")
+            except Exception:
+                pass
+
+
 def is_s3_configured():
     """Return True if AWS S3 env vars are present to enable S3 uploads."""
     return bool(os.environ.get('AWS_S3_BUCKET') and os.environ.get('AWS_ACCESS_KEY_ID') and os.environ.get('AWS_SECRET_ACCESS_KEY'))
@@ -908,7 +950,7 @@ def get_settings():
         except Exception:
             # If commit fails (schema), swallow and return transient settings
             try:
-                db.session.rollback()
+                _safe_db_rollback_and_close()
             except Exception:
                 pass
             return settings
@@ -1302,7 +1344,10 @@ def _retry_failed_emails_loop(interval: int = 60, max_attempts: int = 5):
                             fe.last_attempt_at = utc_now()
                             db.session.commit()
                     except Exception:
-                        db.session.rollback()
+                        try:
+                            _safe_db_rollback_and_close()
+                        except Exception:
+                            pass
                         try:
                             app.logger.exception("Error retrying failed email id=%s", fe.id)
                         except Exception:
@@ -1871,7 +1916,10 @@ def wallet_payment():
         flash("Payment successful via wallet. Thank you!", "success")
         return redirect(url_for("checkout_success"))
     except Exception as e:
-        db.session.rollback()
+        try:
+            _safe_db_rollback_and_close()
+        except Exception:
+            pass
         try:
             app.logger.exception("Wallet payment failed: %s", e)
         except Exception:
@@ -2092,10 +2140,14 @@ def paystack_callback():
                 db.session.commit()
             except Exception:
                 try:
-                    db.session.rollback()
+                    _safe_db_rollback_and_close()
                     app.logger.exception("Failed to persist paystack order")
                 except Exception:
-                    print("[paystack order persist error]")
+                    try:
+                        import sys
+                        sys.stderr.write("[paystack order persist error]\n")
+                    except Exception:
+                        pass
 
             # Clear session (prevent double-payment if callback is called multiple times)
             session.pop("cart", None)
@@ -2400,8 +2452,9 @@ def register():
                 app.logger.exception('Error saving settings during commit: %s\n%s', e, tb)
             except Exception:
                 try:
-                    print('Error saving settings during commit:', e)
-                    print(tb)
+                    import sys
+                    sys.stderr.write(f"Error saving settings during commit: {e}\n")
+                    sys.stderr.write(tb + "\n")
                 except Exception:
                     pass
             try:
@@ -2413,8 +2466,8 @@ def register():
             except Exception:
                 pass
             try:
-                # Attempt a rollback to ensure session isn't left in a failed state
-                db.session.rollback()
+                # Attempt a rollback and close the session to ensure it's not left in a failed state
+                _safe_db_rollback_and_close()
             except Exception:
                 try:
                     app.logger.exception('Rollback after commit failure also failed')
@@ -2565,7 +2618,10 @@ def admin_new():
             flash('Product created successfully.', 'success')
             return redirect(url_for('admin_index'))
         except Exception as e:
-            db.session.rollback()
+            try:
+                _safe_db_rollback_and_close()
+            except Exception:
+                pass
             flash(f'Error creating product: {str(e)}', 'danger')
             return render_template('admin_edit.html', product=None)
     return render_template('admin_edit.html', product=None)
@@ -2653,7 +2709,10 @@ def admin_edit(pid):
             flash(f'Product "{p.title}" updated successfully!', 'success')
             return redirect(url_for('admin_index'))
         except Exception as e:
-            db.session.rollback()
+            try:
+                _safe_db_rollback_and_close()
+            except Exception:
+                pass
             flash(f'Error updating product: {str(e)}', 'danger')
             return render_template('admin_edit.html', product=p)
     return render_template('admin_edit.html', product=p)
@@ -2803,7 +2862,10 @@ def admin_order_update_status(oid):
 
         flash('Order status updated.', 'success')
     except Exception as e:
-        db.session.rollback()
+        try:
+            _safe_db_rollback_and_close()
+        except Exception:
+            pass
         flash(f'Failed to update order status: {e}', 'danger')
     return redirect(url_for('admin_order_detail', oid=oid))
 
@@ -2823,7 +2885,10 @@ def admin_delete(pid):
         db.session.commit()
         flash(f'Product "{product_title}" deleted successfully.', 'info')
     except Exception as e:
-        db.session.rollback()
+        try:
+            _safe_db_rollback_and_close()
+        except Exception:
+            pass
         flash(f'Error deleting product: {str(e)}', 'danger')
     return redirect(url_for('admin_index'))
 
@@ -2864,7 +2929,10 @@ def admin_credit_wallet(user_id):
         db.session.commit()
         flash(f'Credited GH₵{amount:.2f} to {user.email}', 'success')
     except Exception as e:
-        db.session.rollback()
+        try:
+            _safe_db_rollback_and_close()
+        except Exception:
+            pass
         flash(f'Error crediting wallet: {str(e)}', 'danger')
     
     return redirect(url_for('admin_wallets'))
@@ -2893,7 +2961,10 @@ def admin_debit_wallet(user_id):
         db.session.commit()
         flash(f'Debited GH₵{amount:.2f} from {user.email}', 'success')
     except Exception as e:
-        db.session.rollback()
+        try:
+            _safe_db_rollback_and_close()
+        except Exception:
+            pass
         flash(f'Error debiting wallet: {str(e)}', 'danger')
     
     return redirect(url_for('admin_wallets'))
@@ -2980,7 +3051,7 @@ def admin_settings():
                         pass
                     # Ensure DB session is clean after an upload failure
                     try:
-                        db.session.rollback()
+                        _safe_db_rollback_and_close()
                     except Exception:
                         pass
                     flash(f'Logo upload failed: {str(e)}', 'warning')
@@ -3029,7 +3100,7 @@ def admin_settings():
                     except Exception:
                         pass
                     try:
-                        db.session.rollback()
+                        _safe_db_rollback_and_close()
                     except Exception:
                         pass
                     flash(f'Banner 1 upload failed: {str(e)}', 'warning')
@@ -3078,7 +3149,7 @@ def admin_settings():
                     except Exception:
                         pass
                     try:
-                        db.session.rollback()
+                        _safe_db_rollback_and_close()
                     except Exception:
                         pass
                     flash(f'Banner 2 upload failed: {str(e)}', 'warning')
@@ -3127,7 +3198,7 @@ def admin_settings():
                     except Exception:
                         pass
                     try:
-                        db.session.rollback()
+                        _safe_db_rollback_and_close()
                     except Exception:
                         pass
                     flash(f'Background upload failed: {str(e)}', 'warning')
@@ -3178,8 +3249,12 @@ def admin_settings():
                 try:
                     app.logger.exception('Flush failed prior to commit: %s\n%s', e, tb)
                 except Exception:
-                    print('Flush failed prior to commit:', e)
-                    print(tb)
+                    try:
+                        import sys
+                        sys.stderr.write(f"Flush failed prior to commit: {e}\n")
+                        sys.stderr.write(tb + "\n")
+                    except Exception:
+                        pass
                 try:
                     last_err_path = str(Path(tempfile.gettempdir()) / 'last_error.txt')
                     with open(last_err_path, 'w', encoding='utf-8') as fh:
@@ -3189,7 +3264,7 @@ def admin_settings():
                 except Exception:
                     pass
                 try:
-                    db.session.rollback()
+                    _safe_db_rollback_and_close()
                 except Exception:
                     pass
                 raise
@@ -3205,7 +3280,10 @@ def admin_settings():
                 db.session.commit()
                 flash('Settings saved successfully!', 'success')
             except Exception as e_local:
-                db.session.rollback()
+                try:
+                    _safe_db_rollback_and_close()
+                except Exception:
+                    pass
                 # Log full traceback for debugging
                 import traceback
                 tb = traceback.format_exc()
@@ -3213,8 +3291,9 @@ def admin_settings():
                     app.logger.exception('Error saving settings: %s\n%s', e_local, tb)
                 except Exception:
                     try:
-                        print('Error saving settings:', e_local)
-                        print(tb)
+                        import sys
+                        sys.stderr.write(f"Error saving settings: {e_local}\n")
+                        sys.stderr.write(tb + "\n")
                     except Exception:
                         pass
                 # Persist last traceback for ease of debugging on serverless hosts
@@ -3341,7 +3420,7 @@ def admin_settings_api():
             except Exception:
                 pass
             try:
-                db.session.rollback()
+                _safe_db_rollback_and_close()
             except Exception:
                 pass
             return jsonify({'status': 'error', 'message': str(e)}), 500
@@ -3358,7 +3437,10 @@ def admin_settings_api():
             }
         }), 200
     except Exception as e:
-        db.session.rollback()
+        try:
+            _safe_db_rollback_and_close()
+        except Exception:
+            pass
         try:
             app.logger.exception('Failed to save settings via API: %s', e)
         except Exception:
@@ -3421,7 +3503,10 @@ def admin_coupon_new():
             flash(f'Coupon "{code}" created successfully!', 'success')
             return redirect(url_for('admin_coupons'))
         except Exception as e:
-            db.session.rollback()
+            try:
+                _safe_db_rollback_and_close()
+            except Exception:
+                pass
             flash(f'Error creating coupon: {str(e)}', 'danger')
     
     return render_template('admin_coupon_edit.html', coupon=None)
@@ -3462,7 +3547,10 @@ def admin_coupon_edit(cid):
             flash('Coupon updated successfully!', 'success')
             return redirect(url_for('admin_coupons'))
         except Exception as e:
-            db.session.rollback()
+            try:
+                _safe_db_rollback_and_close()
+            except Exception:
+                pass
             flash(f'Error updating coupon: {str(e)}', 'danger')
     
     return render_template('admin_coupon_edit.html', coupon=coupon)
@@ -3484,7 +3572,10 @@ def admin_coupon_delete(cid):
         db.session.commit()
         flash(f'Coupon "{code}" deleted successfully!', 'success')
     except Exception as e:
-        db.session.rollback()
+        try:
+            _safe_db_rollback_and_close()
+        except Exception:
+            pass
         flash(f'Error deleting coupon: {str(e)}', 'danger')
     
     return redirect(url_for('admin_coupons'))
@@ -3535,7 +3626,10 @@ def admin_slider_new():
             flash(f'Slider "{name}" created successfully!', 'success')
             return redirect(url_for('admin_sliders'))
         except Exception as e:
-            db.session.rollback()
+            try:
+                _safe_db_rollback_and_close()
+            except Exception:
+                pass
             flash(f'Error creating slider: {str(e)}', 'danger')
     
     products = Product.query.all()
@@ -3569,7 +3663,10 @@ def admin_slider_edit(sid):
             flash('Slider updated successfully!', 'success')
             return redirect(url_for('admin_sliders'))
         except Exception as e:
-            db.session.rollback()
+            try:
+                _safe_db_rollback_and_close()
+            except Exception:
+                pass
             flash(f'Error updating slider: {str(e)}', 'danger')
     
     products = Product.query.all()
@@ -3592,7 +3689,10 @@ def admin_slider_delete(sid):
         db.session.commit()
         flash(f'Slider "{name}" deleted successfully!', 'success')
     except Exception as e:
-        db.session.rollback()
+        try:
+            _safe_db_rollback_and_close()
+        except Exception:
+            pass
         flash(f'Error deleting slider: {str(e)}', 'danger')
     
     return redirect(url_for('admin_sliders'))
