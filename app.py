@@ -44,6 +44,7 @@ from email.utils import parseaddr
 import json as _json
 import logging
 import sys
+import tempfile
 
 # Optional modern integrations
 REDIS_URL = os.environ.get("REDIS_URL", "")
@@ -444,7 +445,7 @@ def handle_internal_server_error(e):
     # Return a friendly error page while logging details
     # Persist last traceback to a temporary file (serverless writable path)
     try:
-        last_err_path = '/tmp/last_error.txt'
+        last_err_path = str(Path(tempfile.gettempdir()) / 'last_error.txt')
         with open(last_err_path, 'w', encoding='utf-8') as fh:
             fh.write(f"Time: {utc_now().isoformat()}\n")
             fh.write(str(e) + "\n\n")
@@ -468,7 +469,7 @@ def __last_error():
     expected = os.environ.get('ERROR_VIEW_TOKEN')
     if not expected or token != expected:
         abort(403)
-    last_err_path = '/tmp/last_error.txt'
+    last_err_path = str(Path(tempfile.gettempdir()) / 'last_error.txt')
     try:
         with open(last_err_path, 'r', encoding='utf-8') as fh:
             content = fh.read()
@@ -886,7 +887,7 @@ def get_settings():
         try:
             import traceback
             tb = traceback.format_exc()
-            last_err_path = '/tmp/last_error.txt'
+            last_err_path = str(Path(tempfile.gettempdir()) / 'last_error.txt')
             with open(last_err_path, 'w', encoding='utf-8') as fh:
                 fh.write(f"Time: {utc_now().isoformat()}\n")
                 fh.write(str(e) + '\n\n')
@@ -2404,7 +2405,7 @@ def register():
                 except Exception:
                     pass
             try:
-                last_err_path = '/tmp/last_error.txt'
+                last_err_path = str(Path(tempfile.gettempdir()) / 'last_error.txt')
                 with open(last_err_path, 'w', encoding='utf-8') as fh:
                     fh.write(f"Time: {utc_now().isoformat()}\n")
                     fh.write(str(e) + '\n\n')
@@ -3180,7 +3181,7 @@ def admin_settings():
                     print('Flush failed prior to commit:', e)
                     print(tb)
                 try:
-                    last_err_path = '/tmp/last_error.txt'
+                    last_err_path = str(Path(tempfile.gettempdir()) / 'last_error.txt')
                     with open(last_err_path, 'w', encoding='utf-8') as fh:
                         fh.write(f'Time: {utc_now().isoformat()}\n')
                         fh.write(str(e) + '\n\n')
@@ -3218,7 +3219,7 @@ def admin_settings():
                         pass
                 # Persist last traceback for ease of debugging on serverless hosts
                 try:
-                    last_err_path = '/tmp/last_error.txt'
+                    last_err_path = str(Path(tempfile.gettempdir()) / 'last_error.txt')
                     with open(last_err_path, 'w', encoding='utf-8') as fh:
                         fh.write(f"Time: {utc_now().isoformat()}\n")
                         fh.write(str(e_local) + '\n\n')
