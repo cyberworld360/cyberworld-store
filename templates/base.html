@@ -62,7 +62,7 @@
           <a href="/cart" class="cart-link" aria-label="Cart">🛒<span class="cart-count" aria-live="polite" aria-atomic="true"></span></a>
         </div>
         {% endif %}
-        <div class="brand center-logo" style="top: calc(50% + {{ settings.logo_top_px or 0 }}px); z-index: {{ settings.logo_zindex or 9999 }};">
+        <div class="brand center-logo" style="top: calc({{ settings.logo_top_px or 8 }}px); z-index: {{ settings.logo_zindex or 9999 }};">
           <a href="/" class="logo-link">
             <img src="{{ settings.get_logo_url() }}" alt="CyberWorld" class="logo-img" style="height: {{ settings.logo_height or 48 }}px;" />
           </a>

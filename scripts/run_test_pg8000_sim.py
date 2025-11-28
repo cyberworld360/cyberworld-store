@@ -5,6 +5,7 @@ import importlib
 
 sys.path.insert(0, os.getcwd())
 from app import app, db, AdminUser
+from sqlalchemy.orm import Session
 
 # Simple setup to run the admin settings test simulation
 
@@ -27,8 +28,8 @@ if __name__ == '__main__':
     print('login status:', resp.status_code)
     assert resp.status_code == 200
 
-    # monkeypatch flush behavior
-    orig_flush = db.session.flush
+    # monkeypatch Session.flush behavior (similar to pytest test)
+    orig_flush = Session.flush
     counter = {'count': 0}
 
     def fake_flush(*args, **kwargs):
@@ -39,7 +40,8 @@ if __name__ == '__main__':
             raise pg8000.exceptions.InterfaceError('simulated interface error for tests')
         return orig_flush(*args, **kwargs)
 
-    db.session.flush = fake_flush
+    # Patch the Session.flush method used by SQLAlchemy sessions created per request
+    Session.flush = fake_flush
 
     import tempfile
     from pathlib import Path
@@ -59,4 +61,4 @@ if __name__ == '__main__':
         print('last_error file not found')
 
     # restore original flush
-    db.session.flush = orig_flush
+    Session.flush = orig_flush

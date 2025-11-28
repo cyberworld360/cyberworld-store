@@ -43,7 +43,7 @@ body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial; margin:
 .logo-img { height: var(--logo-height, 48px); display:block; }
 .site-header .header-left { position:absolute; left: 0.8rem; display:flex; align-items:center; gap:10px; z-index: 100; top: 50%; transform: translateY(-50%); }
 .site-header .header-right { position:absolute; right: 0.8rem; display:flex; align-items:center; z-index: 100; top: 50%; transform: translateY(-50%); }
-.site-header .center-logo { text-align:center; position: absolute; left: 50%; top: calc(50% + var(--logo-top, 0px)); transform: translate(-50%, -50%); z-index: var(--logo-zindex, 9999); pointer-events: auto; }
+.site-header .center-logo { text-align:center; position: absolute; left: 50%; top: var(--logo-top, 8px); transform: translateX(-50%); z-index: var(--logo-zindex, 9999); pointer-events: auto; }
 .site-header .main-nav { display:block; }
 .site-header .main-nav a { color: #fff; opacity: 0.95; }
 

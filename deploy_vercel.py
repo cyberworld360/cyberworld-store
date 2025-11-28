@@ -61,9 +61,9 @@ def main(argv=None):
     print("\n🔍 Validating configuration...")
     env_file = base_dir / ".env"
     if not env_file.exists():
-        print(f"❌ .env file not found at {env_file}")
-        return False
-    print(f"✅ .env file found")
+        print(f"⚠️  .env file not found at {env_file}. If you are running non-interactively, ensure necessary env vars are set in the environment (e.g. VERCEL_TOKEN, DATABASE_URL). Continuing...")
+    else:
+        print(f"✅ .env file found")
     
     # Step 3: Check Python and dependencies
     print("\n🐍 Checking Python environment...")

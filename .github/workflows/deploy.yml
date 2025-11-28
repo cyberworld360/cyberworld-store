@@ -133,10 +133,16 @@ jobs:
         DBURL=$(echo "$DBURL" | sed -e 's|^postgres://|postgresql+pg8000://|' -e 's|^postgresql://|postgresql+pg8000://|')
         export SQLALCHEMY_DATABASE_URI="$DBURL"
         python -m flask db upgrade
-          - name: Upload last_error artifact if present
-            if: always()
-            uses: actions/upload-artifact@v4
-            with:
-              name: last_error_deploy_migration
-              path: /tmp/last_error.txt
-              if-no-files-found: ignore
+
+    - name: Check for last_error (post-migration)
+      id: check-last-error
+      run: |
+        if [ -f /tmp/last_error.txt ]; then echo "exists=true" >> $GITHUB_OUTPUT; else echo "exists=false" >> $GITHUB_OUTPUT; fi
+
+    - name: Upload last_error artifact if present
+      if: ${{ steps.check-last-error.outputs.exists == 'true' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: last_error_deploy_migration-${{ github.event.pull_request.number || github.run_id }}
+        path: /tmp/last_error.txt
+        if-no-files-found: ignore

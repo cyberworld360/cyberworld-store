@@ -23,6 +23,19 @@ jobs:
         run: |
           pytest -q
 
+      - name: Check for last_error
+        id: check-last-error
+        run: |
+          if [ -f /tmp/last_error.txt ]; then echo "exists=true" >> $GITHUB_OUTPUT; else echo "exists=false" >> $GITHUB_OUTPUT; fi
+
+      - name: Upload last_error artifact (if present)
+        if: ${{ steps.check-last-error.outputs.exists == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: last_error_${{ github.run_id }}
+          path: /tmp/last_error.txt
+          retention-days: 7
+
   deploy-placeholder:
     runs-on: ubuntu-latest
     needs: test
