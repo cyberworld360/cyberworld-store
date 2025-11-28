@@ -41,7 +41,9 @@ if __name__ == '__main__':
 
     db.session.flush = fake_flush
 
-    last_err_path = '/tmp/last_error.txt'
+    import tempfile
+    from pathlib import Path
+    last_err_path = str(Path(tempfile.gettempdir()) / 'last_error.txt')
     if os.path.exists(last_err_path):
         os.unlink(last_err_path)
 

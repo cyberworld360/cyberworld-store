@@ -65,6 +65,19 @@ heroku addons:create heroku-postgresql:hobby-dev
 DATABASE_URL=postgresql://user:pass@host:5432/dbname
 ```
 
+### Neon (managed Postgres) guidance
+If you are using Neon on Vercel, you can store the Neon connection string in GitHub Secrets as `NEON_DATABASE_URL` (pooled) and `NEON_DATABASE_URL_UNPOOLED` (unpooled). The CI and deploy workflows will prefer Neon when `NEON_DATABASE_URL` is present.
+
+Example (Neon pooled URL):
+```
+postgresql://neondb_owner:password@ep-empty-frog-.../neondb?sslmode=require
+```
+
+To enable Neon CI integration:
+- Add `NEON_DATABASE_URL` under your repository -> Settings -> Secrets & variables -> Actions.
+- Ensure the Neon DB is a disposable/test DB since migrations and tests may alter data.
+
+
 ### Step 4: Install & Deploy (10 min)
 **For Heroku:**
 ```bash

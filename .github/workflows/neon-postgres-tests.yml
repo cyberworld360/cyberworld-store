@@ -1,4 +1,4 @@
-name: Postgres/pg8000 Integration Test
+name: Neon Postgres Integration Test
 
 on:
   workflow_dispatch:
@@ -6,24 +6,10 @@ on:
     branches: [ fix/admin-settings-500 ]
 
 jobs:
-  test-pg8000:
-    # Run the dockerized Postgres-based CI only when NEON_DATABASE_URL is NOT provided
-    if: ${{ secrets.NEON_DATABASE_URL == '' }}
+  test-neon:
+    # Run Neon-based integration tests when NEON_DATABASE_URL is provided in secrets
+    if: ${{ secrets.NEON_DATABASE_URL != '' }}
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_DB: cwdb
-          POSTGRES_USER: pguser
-          POSTGRES_PASSWORD: secret
-        options: >-
-          --health-cmd "pg_isready -U pguser -d cwdb"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
     steps:
     - name: Checkout repo
       uses: actions/checkout@v4
@@ -38,25 +24,20 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt || true
         pip install pg8000
-    - name: Wait for Postgres
-      env:
-        PGHOST: localhost
-        PGPORT: 5432
+    - name: Export Neon DB URL for SQLAlchemy using pg8000
       run: |
-        for i in {1..15}; do
-          pg_isready -U pguser -d cwdb && break || sleep 2
-        done
-    - name: Export DB URL for SQLAlchemy using pg8000
-      run: |
-        echo "DATABASE_URL=postgresql+pg8000://pguser:secret@localhost:5432/cwdb" >> $GITHUB_ENV
+        NEON_URL="${{ secrets.NEON_DATABASE_URL }}"
+        # Ensure URI uses postgresql+pg8000 scheme so SQLAlchemy loads pg8000
+        DBURL=$(echo "$NEON_URL" | sed -e 's|^postgres://|postgresql+pg8000://|' -e 's|^postgresql://|postgresql+pg8000://|')
+        echo "DATABASE_URL=$DBURL" >> $GITHUB_ENV
         echo "FLASK_APP=app.py" >> $GITHUB_ENV
-    - name: Run DB migrations
+    - name: Run DB migrations (Neon)
       env:
         DATABASE_URL: ${{ env.DATABASE_URL }}
         FLASK_APP: app.py
       run: |
         python -m flask db upgrade
-    - name: Run targeted tests
+    - name: Run targeted tests (Neon)
       env:
         DATABASE_URL: ${{ env.DATABASE_URL }}
         FLASK_APP: app.py
@@ -79,5 +60,3 @@ jobs:
         name: last_error
         path: /tmp/last_error.txt
         if-no-files-found: ignore
-  # NOTE: Neon-specific job has been moved to a dedicated workflow file: neon-postgres-tests.yml
-
