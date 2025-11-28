@@ -18,11 +18,12 @@ def test_paystack_initialize_url_returns_authorization():
         p = Product(title='PS Test', short='pst', price_ghc=Decimal('100.00'))
         db.session.add(p)
         db.session.commit()
+        pid = p.id
 
     client = app.test_client()
     # Add item to session cart
     with client.session_transaction() as sess:
-        sess['cart'] = {str(p.id): 1}
+        sess['cart'] = {str(pid): 1}
 
     # Post to paystack init url (forms accepted)
     resp = client.post('/pay/paystack/url', data={'email': 'customer@example.com', 'name': 'John Doe', 'phone': '+233111111111', 'city': 'Accra'}, follow_redirects=True)

@@ -17,10 +17,15 @@ depends_on = None
 
 
 def upgrade():
-    # Add binary column for product image data and mime type
+    # Add binary column for product image data and mime type (only if missing)
+    conn = op.get_bind()
+    insp = sa.inspect(conn)
+    existing_cols = {c['name'] for c in insp.get_columns('product')}
     with op.batch_alter_table('product', schema=None) as batch_op:
-        batch_op.add_column(sa.Column('product_image_data', sa.LargeBinary(), nullable=True))
-        batch_op.add_column(sa.Column('product_image_mime', sa.String(length=100), nullable=True))
+        if 'product_image_data' not in existing_cols:
+            batch_op.add_column(sa.Column('product_image_data', sa.LargeBinary(), nullable=True))
+        if 'product_image_mime' not in existing_cols:
+            batch_op.add_column(sa.Column('product_image_mime', sa.String(length=100), nullable=True))
 
 
 def downgrade():

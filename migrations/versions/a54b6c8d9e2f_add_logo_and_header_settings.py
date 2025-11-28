@@ -17,18 +17,36 @@ depends_on = None
 
 
 def upgrade():
+    # Add new header/logo columns if missing
+    conn = op.get_bind()
+    insp = sa.inspect(conn)
+    existing_cols = {c['name'] for c in insp.get_columns('settings')}
     with op.batch_alter_table('settings', schema=None) as batch_op:
-        batch_op.add_column(sa.Column('logo_height', sa.Integer(), nullable=True))
-        batch_op.add_column(sa.Column('logo_top_px', sa.Integer(), nullable=True))
-        batch_op.add_column(sa.Column('logo_zindex', sa.Integer(), nullable=True))
-        batch_op.add_column(sa.Column('cart_on_right', sa.Boolean(), nullable=True))
-        batch_op.add_column(sa.Column('custom_css', sa.Text(), nullable=True))
+        if 'logo_height' not in existing_cols:
+            batch_op.add_column(sa.Column('logo_height', sa.Integer(), nullable=True))
+        if 'logo_top_px' not in existing_cols:
+            batch_op.add_column(sa.Column('logo_top_px', sa.Integer(), nullable=True))
+        if 'logo_zindex' not in existing_cols:
+            batch_op.add_column(sa.Column('logo_zindex', sa.Integer(), nullable=True))
+        if 'cart_on_right' not in existing_cols:
+            batch_op.add_column(sa.Column('cart_on_right', sa.Boolean(), nullable=True))
+        if 'custom_css' not in existing_cols:
+            batch_op.add_column(sa.Column('custom_css', sa.Text(), nullable=True))
 
 
 def downgrade():
+    # Only drop columns if they exist
+    conn = op.get_bind()
+    insp = sa.inspect(conn)
+    existing_cols = {c['name'] for c in insp.get_columns('settings')}
     with op.batch_alter_table('settings', schema=None) as batch_op:
-        batch_op.drop_column('custom_css')
-        batch_op.drop_column('cart_on_right')
-        batch_op.drop_column('logo_zindex')
-        batch_op.drop_column('logo_top_px')
-        batch_op.drop_column('logo_height')
+        if 'custom_css' in existing_cols:
+            batch_op.drop_column('custom_css')
+        if 'cart_on_right' in existing_cols:
+            batch_op.drop_column('cart_on_right')
+        if 'logo_zindex' in existing_cols:
+            batch_op.drop_column('logo_zindex')
+        if 'logo_top_px' in existing_cols:
+            batch_op.drop_column('logo_top_px')
+        if 'logo_height' in existing_cols:
+            batch_op.drop_column('logo_height')
