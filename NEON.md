@@ -27,6 +27,32 @@ postgresql://neondb_owner:xyz@ep-empty-frog-.../neondb?sslmode=require
 
 Make sure the API key used for `NEON_API_KEY` has the permission to create preview branches and to run schema-diff operations. These values are required by the preview PR workflow to create and delete branch instances and post schema diffs back to PRs.
 
+### Using GitHub CLI (`gh`) to set the values (recommended)
+
+If you'd rather set the `NEON_PROJECT_ID` and `NEON_API_KEY` via the CLI instead of the web UI, you can use the GitHub CLI (`gh`) to do so – without storing the secret values in your repo. The repository already contains a helper PowerShell script at `tools/set_neon_secrets.ps1` which calls `gh` and avoids committing secrets to source control.
+
+Example (PowerShell):
+
+```pwsh
+# Set as environment variables locally (safe):
+$env:NEON_PROJECT_ID = '<YOUR_NEON_PROJECT_ID>'    # example only; do not commit
+$env:NEON_API_KEY = '<YOUR_NEON_API_KEY>'          # example only; do not commit
+# Run the helper; it will auto-detect the repo if run in your local git clone
+.\tools\set_neon_secrets.ps1 -RepoOwner 'cyberworld360' -RepoName 'cyberworld-store'
+```
+
+If you don't want to use the script, a minimal sequence of `gh` commands accomplishes the same task (owner/repo required):
+
+```pwsh
+gh api --method PUT /repos/<owner>/<repo>/actions/variables/NEON_PROJECT_ID -f value='<your_neon_project_id>'
+gh secret set NEON_API_KEY --repo <owner>/<repo> --body '<your_api_key>'
+```
+
+Notes:
+- `gh secret set` stores the secret encrypted at the repo level and is recommended for secrets like API keys.
+- `NEON_PROJECT_ID` is a non-secret repo Actions variable, used by CI workflows.
+- Always avoid committing secret values to your repository or exposing them in PR comments or logs.
+
 > Note: The CI workflows will translate the URL to use `postgresql+pg8000://` for SQLAlchemy automatically when running Neon tests.
 
 ## Running Neon tests locally
