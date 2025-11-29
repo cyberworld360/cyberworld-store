@@ -1709,6 +1709,7 @@ def paystack_init():
         if data.get("status") and data.get("data") and data["data"].get("authorization_url"):
             # store pending payment info (email and items) to verify after redirect
             session["pending_payment"] = {"reference": reference, "amount": amount_minor, "email": email, "items": items, "coupon_id": int(coupon_id) if coupon_id else None, "discount": str(discount)}
+            session.modified = True
             return redirect(data["data"]["authorization_url"])
         else:
             flash("Failed to initialize Paystack payment: " + str(data.get("message", "unknown")), "danger")
@@ -1792,6 +1793,7 @@ def paystack_init_url():
         data = r.json()
         if data.get("status") and data.get("data") and data["data"].get("authorization_url"):
             session["pending_payment"] = {"reference": reference, "amount": amount_minor, "email": email, "items": items, "coupon_id": int(coupon_id) if coupon_id else None, "discount": str(discount)}
+            session.modified = True
             return jsonify({'status': 'success', 'authorization_url': data['data']['authorization_url'], 'reference': reference}), 200
         else:
             return jsonify({'status': 'error', 'message': 'Failed to initialize Paystack payment.'}), 500
