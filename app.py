@@ -389,8 +389,26 @@ def init_db_on_first_request():
                     admin.username = "Cyberjnr"
                     admin.set_password("GITG360$")
                     db.session.add(admin)
-                    db.session.commit()
-                    app.logger.info("Created default admin user: Cyberjnr")
+                    try:
+                        db.session.commit()
+                        app.logger.info("Created default admin user: Cyberjnr")
+                    except Exception as commit_exc:
+                        # Handle rare race/unique-constraint situations gracefully
+                        try:
+                            from sqlalchemy.exc import IntegrityError
+                            if isinstance(commit_exc, IntegrityError) or (hasattr(commit_exc, '__cause__') and isinstance(commit_exc.__cause__, IntegrityError)):
+                                try:
+                                    db.session.rollback()
+                                except Exception:
+                                    pass
+                                app.logger.info('Default admin already exists (race or duplicate), continuing')
+                            else:
+                                raise
+                        except Exception:
+                            try:
+                                app.logger.exception("Failed to commit default admin: %s", commit_exc)
+                            except Exception:
+                                print(f"[db init] Failed to commit default admin: {commit_exc}")
                 except Exception as e:
                     try:
                         app.logger.exception("Failed to create default admin: %s", e)
@@ -3123,43 +3141,50 @@ def admin_settings():
             if file and file.filename and allowed_file(file.filename):
                 try:
                     mime_type = get_mime_type(file.filename)
-                    # Try S3 first
-                    if is_s3_configured():
-                        key = f"logo_{int(time.time())}_{secure_filename(file.filename)}"
-                        url = upload_to_s3(file, key, mime_type=mime_type)
-                        if url:
-                            # Some S3 URLs may exceed DB varchar limits. If so, fallback to storing bytes
-                            if len(url) > 300:
-                                # fallback to DB storage if URL is too long to fit
+                    # Unified save with local or S3 fallback
+                    filename = secure_filename(file.filename)
+                    filename = f"logo_{int(time.time())}_{filename}"
+                    try:
+                        saved = _save_uploaded_file(file, filename, mime_type=mime_type)
+                        if isinstance(saved, str) and saved.startswith('http'):
+                            # S3 URL returned; check DB length limits
+                            if len(saved) > 300:
                                 file.seek(0)
                                 b64_data = encode_image_to_base64(file)
                                 settings.logo_image_data = b64_data
                                 settings.logo_image_mime = mime_type
                                 settings.logo_image = f"/database/logo_from_{secure_filename(file.filename)}"
                                 try:
-                                    app.logger.warning('S3 URL too long for DB, stored logo as DB fallback len=%s', len(url))
+                                    app.logger.warning('S3 URL too long for DB; stored logo as DB fallback len=%s', len(saved))
                                 except Exception:
                                     pass
                                 flash('Logo saved to database (fallback) due to long S3 URL', 'success')
                             else:
-                                settings.logo_image = url
-                                # Clear DB-stored binary if present
+                                settings.logo_image = saved
                                 settings.logo_image_data = None
                                 settings.logo_image_mime = mime_type
                                 flash('Logo uploaded to S3 successfully!', 'success')
+                        elif isinstance(saved, str) and saved.startswith('/uploads/images'):
+                            settings.logo_image = saved
+                            settings.logo_image_data = None
+                            settings.logo_image_mime = mime_type
+                            flash('Logo saved to uploads successfully!', 'success')
                         else:
-                            # fallback to DB storage
+                            # Fallback to database storage
+                            file.seek(0)
                             b64_data = encode_image_to_base64(file)
                             settings.logo_image_data = b64_data
                             settings.logo_image_mime = mime_type
                             settings.logo_image = f"/database/logo_from_{secure_filename(file.filename)}"
                             flash('Logo saved to database (fallback) successfully!', 'success')
-                    else:
+                    except Exception:
+                        # Fallback to DB if saving/uploading failed
+                        file.seek(0)
                         b64_data = encode_image_to_base64(file)
                         settings.logo_image_data = b64_data
                         settings.logo_image_mime = mime_type
                         settings.logo_image = f"/database/logo_from_{secure_filename(file.filename)}"
-                        flash('Logo saved to database successfully!', 'success')
+                        flash('Logo saved to database (fallback) successfully!', 'success')
                 except Exception as e:
                     try:
                         app.logger.exception('Logo upload failed')
@@ -3178,38 +3203,46 @@ def admin_settings():
             if file and file.filename and allowed_file(file.filename):
                 try:
                     mime_type = get_mime_type(file.filename)
-                    if is_s3_configured():
-                        key = f"banner1_{int(time.time())}_{secure_filename(file.filename)}"
-                        url = upload_to_s3(file, key, mime_type=mime_type)
-                        if url:
-                            if len(url) > 300:
+                    filename = secure_filename(file.filename)
+                    filename = f"banner1_{int(time.time())}_{filename}"
+                    try:
+                        saved = _save_uploaded_file(file, filename, mime_type=mime_type)
+                        if isinstance(saved, str) and saved.startswith('http'):
+                            if len(saved) > 300:
                                 file.seek(0)
                                 b64_data = encode_image_to_base64(file)
                                 settings.banner1_image_data = b64_data
                                 settings.banner1_image_mime = mime_type
                                 settings.banner1_image = f"/database/banner1_from_{secure_filename(file.filename)}"
                                 try:
-                                    app.logger.warning('S3 URL too long for DB, stored banner1 as DB fallback len=%s', len(url))
+                                    app.logger.warning('S3 URL too long for DB, stored banner1 as DB fallback len=%s', len(saved))
                                 except Exception:
                                     pass
                                 flash('Banner 1 saved to database (fallback) due to long S3 URL', 'success')
                             else:
-                                settings.banner1_image = url
+                                settings.banner1_image = saved
+                                settings.banner1_image_data = None
+                                settings.banner1_image_mime = mime_type
+                                flash('Banner 1 uploaded to S3 successfully!', 'success')
+                        elif isinstance(saved, str) and saved.startswith('/uploads/images'):
+                            settings.banner1_image = saved
                             settings.banner1_image_data = None
                             settings.banner1_image_mime = mime_type
-                            flash('Banner 1 uploaded to S3 successfully!', 'success')
+                            flash('Banner 1 saved to uploads successfully!', 'success')
                         else:
+                            file.seek(0)
                             b64_data = encode_image_to_base64(file)
                             settings.banner1_image_data = b64_data
                             settings.banner1_image_mime = mime_type
                             settings.banner1_image = f"/database/banner1_from_{secure_filename(file.filename)}"
                             flash('Banner 1 saved to database (fallback) successfully!', 'success')
-                    else:
+                    except Exception:
+                        file.seek(0)
                         b64_data = encode_image_to_base64(file)
                         settings.banner1_image_data = b64_data
                         settings.banner1_image_mime = mime_type
                         settings.banner1_image = f"/database/banner1_from_{secure_filename(file.filename)}"
-                        flash('Banner 1 saved to database successfully!', 'success')
+                        flash('Banner 1 saved to database (fallback) successfully!', 'success')
                 except Exception as e:
                     try:
                         app.logger.exception('Banner 1 upload failed')
@@ -3319,114 +3352,118 @@ def admin_settings():
                         pass
                     flash(f'Background upload failed: {str(e)}', 'warning')
         
-            # Logo size/position settings
+        # Logo size/position settings (NOT inside if block—applies always)
+        try:
+            lh = request.form.get('logo_height')
+            if lh is not None:
+                settings.logo_height = int(lh)
+        except Exception:
+            pass
+        try:
+            lt = request.form.get('logo_top_px')
+            if lt is not None:
+                settings.logo_top_px = int(lt)
+        except Exception:
+            pass
+        try:
+            lz = request.form.get('logo_zindex')
+            if lz is not None:
+                settings.logo_zindex = int(lz)
+        except Exception:
+            pass
+        try:
+            # Cart alignment: checkbox value; presence means checked
+            settings.cart_on_right = bool(request.form.get('cart_on_right'))
+        except Exception:
+            pass
+        try:
+            if 'custom_css' in request.form:
+                settings.custom_css = request.form.get('custom_css') or ''
+        except Exception:
+            pass
+        settings.updated_at = utc_now()
+        # Log settings fields and session state that may cause DB commit errors (BLOB sizes, types)
+        try:
+            app.logger.debug('Session new=%s dirty=%s deleted=%s',
+                             len(db.session.new), len(db.session.dirty), len(db.session.deleted))
+        except Exception:
+            pass
+        # Flush to help pinpoint DB errors (flush executes SQL without committing)
+        try:
+            db.session.flush()
+        except Exception as e:
+            # Log traceback, rollback, persist to /tmp/last_error and re-raise
+            import traceback
+            tb = traceback.format_exc()
             try:
-                lh = request.form.get('logo_height')
-                if lh is not None:
-                    settings.logo_height = int(lh)
+                app.logger.exception('Flush failed prior to commit: %s\n%s', e, tb)
             except Exception:
-                pass
-            try:
-                lt = request.form.get('logo_top_px')
-                if lt is not None:
-                    settings.logo_top_px = int(lt)
-            except Exception:
-                pass
-            try:
-                lz = request.form.get('logo_zindex')
-                if lz is not None:
-                    settings.logo_zindex = int(lz)
-            except Exception:
-                pass
-            try:
-                # Cart alignment: checkbox value; presence means checked
-                settings.cart_on_right = bool(request.form.get('cart_on_right'))
-            except Exception:
-                pass
-            try:
-                if 'custom_css' in request.form:
-                    settings.custom_css = request.form.get('custom_css') or ''
-            except Exception:
-                pass
-            settings.updated_at = utc_now()
-            # Log settings fields and session state that may cause DB commit errors (BLOB sizes, types)
-            try:
-                app.logger.debug('Session new=%s dirty=%s deleted=%s',
-                                 len(db.session.new), len(db.session.dirty), len(db.session.deleted))
-            except Exception:
-                pass
-            # Flush to help pinpoint DB errors (flush executes SQL without committing)
-            try:
-                db.session.flush()
-            except Exception as e:
-                # Log traceback, rollback, persist to /tmp/last_error and re-raise
-                import traceback
-                tb = traceback.format_exc()
                 try:
-                    app.logger.exception('Flush failed prior to commit: %s\n%s', e, tb)
-                except Exception:
-                    try:
-                        import sys
-                        sys.stderr.write(f"Flush failed prior to commit: {e}\n")
-                        sys.stderr.write(tb + "\n")
-                    except Exception:
-                        pass
-                try:
-                    last_err_path = str(Path(tempfile.gettempdir()) / 'last_error.txt')
-                    with open(last_err_path, 'w', encoding='utf-8') as fh:
-                        fh.write(f'Time: {utc_now().isoformat()}\n')
-                        fh.write(str(e) + '\n\n')
-                        fh.write(tb)
+                    import sys
+                    sys.stderr.write(f"Flush failed prior to commit: {e}\n")
+                    sys.stderr.write(tb + "\n")
                 except Exception:
                     pass
-                try:
-                    _safe_db_rollback_and_close()
-                except Exception:
-                    pass
-                raise
-            # Log settings fields that may cause DB commit errors (BLOB sizes, types)
             try:
-                app.logger.debug(
-                    'Saving settings values: logo_image_len=%s logo_image_data_len=%s logo_image_mime=%s banner1_image_len=%s banner1_image_data_len=%s',
-                    len(settings.logo_image or ''), len(settings.logo_image_data or b''), settings.logo_image_mime,
-                    len(settings.banner1_image or ''), len(settings.banner1_image_data or b''))
+                last_err_path = str(Path(tempfile.gettempdir()) / 'last_error.txt')
+                with open(last_err_path, 'w', encoding='utf-8') as fh:
+                    fh.write(f'Time: {utc_now().isoformat()}\n')
+                    fh.write(str(e) + '\n\n')
+                    fh.write(tb)
             except Exception:
                 pass
             try:
-                db.session.commit()
-                flash('Settings saved successfully!', 'success')
-            except Exception as e_local:
+                _safe_db_rollback_and_close()
+            except Exception:
+                pass
+            # Return 500 with rendered admin_settings so tests can verify last_error.txt was written
+            try:
+                return render_template('admin_settings.html', settings=settings), 500
+            except Exception:
+                return ('Internal server error', 500)
+        # Log settings fields that may cause DB commit errors (BLOB sizes, types)
+        try:
+            app.logger.debug(
+                'Saving settings values: logo_image_len=%s logo_image_data_len=%s logo_image_mime=%s banner1_image_len=%s banner1_image_data_len=%s',
+                len(settings.logo_image or ''), len(settings.logo_image_data or b''), settings.logo_image_mime,
+                len(settings.banner1_image or ''), len(settings.banner1_image_data or b''))
+        except Exception:
+            pass
+        try:
+            db.session.commit()
+            flash('Settings saved successfully!', 'success')
+        except Exception as e_local:
+            try:
+                _safe_db_rollback_and_close()
+            except Exception:
+                pass
+            # Log full traceback for debugging
+            import traceback
+            tb = traceback.format_exc()
+            try:
+                app.logger.exception('Error saving settings: %s\n%s', e_local, tb)
+            except Exception:
                 try:
-                    _safe_db_rollback_and_close()
+                    import sys
+                    sys.stderr.write(f"Error saving settings: {e_local}\n")
+                    sys.stderr.write(tb + "\n")
                 except Exception:
                     pass
-                # Log full traceback for debugging
-                import traceback
-                tb = traceback.format_exc()
-                try:
-                    app.logger.exception('Error saving settings: %s\n%s', e_local, tb)
-                except Exception:
-                    try:
-                        import sys
-                        sys.stderr.write(f"Error saving settings: {e_local}\n")
-                        sys.stderr.write(tb + "\n")
-                    except Exception:
-                        pass
-                # Persist last traceback for ease of debugging on serverless hosts
-                try:
-                    last_err_path = str(Path(tempfile.gettempdir()) / 'last_error.txt')
-                    with open(last_err_path, 'w', encoding='utf-8') as fh:
-                        fh.write(f"Time: {utc_now().isoformat()}\n")
-                        fh.write(str(e_local) + '\n\n')
-                        fh.write(tb)
-                except Exception:
-                    pass
-                # Safely derive a short error message for the user without assuming `e_local` is available
-                try:
-                    err_msg = str(e_local) if 'e_local' in locals() else 'An internal error occurred'
-                except Exception:
-                    err_msg = 'An internal error occurred'
-                flash(f'Error saving settings: {err_msg}', 'danger')
+            # Persist last traceback for ease of debugging on serverless hosts
+            try:
+                last_err_path = str(Path(tempfile.gettempdir()) / 'last_error.txt')
+                with open(last_err_path, 'w', encoding='utf-8') as fh:
+                    fh.write(f"Time: {utc_now().isoformat()}\n")
+                    fh.write(str(e_local) + '\n\n')
+                    fh.write(tb)
+            except Exception:
+                pass
+            # Safely derive a short error message for the user without assuming `e_local` is available
+            try:
+                err_msg = str(e_local) if 'e_local' in locals() else 'An internal error occurred'
+            except Exception:
+                err_msg = 'An internal error occurred'
+            flash(f'Error saving settings: {err_msg}', 'danger')
     
     return render_template('admin_settings.html', settings=settings)
 
@@ -3817,7 +3854,16 @@ def admin_slider_delete(sid):
 @app.route('/static/images/<path:fname>')
 def static_images(fname):
     try:
-        resp = send_from_directory(str(UPLOAD_FOLDER), fname)
+        upload_folder = app.config.get('UPLOAD_FOLDER') or str(UPLOAD_FOLDER)
+        file_path = Path(upload_folder) / fname
+        if not file_path.exists():
+            raise FileNotFoundError(f"{file_path} not found")
+        # Read file into memory so we don't keep OS file handles open on Windows
+        with open(file_path, 'rb') as fh:
+            data = fh.read()
+        import mimetypes as _mimetypes
+        mimetype = _mimetypes.guess_type(str(file_path))[0] or 'application/octet-stream'
+        resp = app.response_class(data, mimetype=mimetype)
         # Add Cache-Control header for public caches (1 hour) and avoid content sniffing
         resp.headers['Cache-Control'] = 'public, max-age=3600'
         resp.headers['X-Content-Type-Options'] = 'nosniff'
@@ -3834,7 +3880,16 @@ def uploads_images(fname):
     consistent public URL (`/uploads/images/*`) regardless of whether the
     upload folder is local or `/tmp` on serverless hosts (Vercel)."""
     try:
-        resp = send_from_directory(str(UPLOAD_FOLDER), fname)
+        upload_folder = app.config.get('UPLOAD_FOLDER') or str(UPLOAD_FOLDER)
+        file_path = Path(upload_folder) / fname
+        if not file_path.exists():
+            raise FileNotFoundError(f"{file_path} not found")
+        # Read file into memory so file handles are released immediately (Windows-safe)
+        with open(file_path, 'rb') as fh:
+            data = fh.read()
+        import mimetypes as _mimetypes
+        mimetype = _mimetypes.guess_type(str(file_path))[0] or 'application/octet-stream'
+        resp = app.response_class(data, mimetype=mimetype)
         resp.headers['Cache-Control'] = 'public, max-age=3600'
         resp.headers['X-Content-Type-Options'] = 'nosniff'
         return resp
