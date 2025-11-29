@@ -1,0 +1,303 @@
+STATUS: 200 OK
+HEADERS:
+Content-Type: text/html; charset=utf-8
+Content-Length: 10102
+Vary: Cookie
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CyberWorld Store</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+      :root {
+        --primary-color: #27ae60;
+        --secondary-color: #2c3e50;
+        --primary-font: Arial, sans-serif;
+        --secondary-font: Verdana, sans-serif;
+        --logo-height: 48px;
+        --logo-top: 0px;
+        --header-top: 8px;
+        --logo-zindex: 9999;
+      }
+      body {
+        font-family: var(--primary-font);
+        margin: 0; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
+      }
+      h1, h2, h3, h4, h5, h6 {
+        font-family: var(--secondary-font);
+      }
+    </style>
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container header-grid">
+        
+        <div class="header-left">
+          <a href="/cart" class="cart-link" aria-label="Cart">🛒<span class="cart-count" aria-live="polite" aria-atomic="true"></span></a>
+        </div>
+        
+        <div class="brand center-logo" style="top: calc(8px); z-index: 9999;">
+          <a href="/" class="logo-link">
+            <img src="/static/images/logo.svg" alt="CyberWorld" class="logo-img" style="height: 48px;" />
+          </a>
+        </div>
+        
+        <div class="header-right">
+          <button id="mobile-menu-toggle" class="mobile-menu-toggle" aria-label="Toggle menu">☰</button>
+          <nav class="main-nav">
+            <div class="nav-panel" aria-hidden="true">
+            
+              <a href="/admin/login">Admin</a>
+              <a href="/register">Register</a>
+              <a href="/login">Customer Login</a>
+            
+          </div>
+            </div>
+          </nav>
+        </div>
+        
+      </div>
+    </header>
+    <main class="container">
+      
+        
+      
+      
+<style>
+  /* Homepage background styling */
+  body {
+    background-image: url('/static/images/product-bg.svg');
+    background-attachment: fixed;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+  }
+  
+  .products .card {
+    background: rgba(255, 255, 255, 0.92);
+    -webkit-backdrop-filter: blur(5px);
+    backdrop-filter: blur(5px);
+  }
+  .featured .card {
+    background: rgba(255, 255, 255, 0.92);
+    -webkit-backdrop-filter: blur(5px);
+    backdrop-filter: blur(5px);
+  }
+</style>
+
+<style>
+  /* Card size variants */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 20px;
+  }
+  
+  .card.card-small {
+    grid-column: span 1;
+    min-height: 280px;
+  }
+  
+  .card.card-small img {
+    height: 120px;
+    object-fit: cover;
+  }
+  
+  .card.card-medium {
+    grid-column: span 1;
+    min-height: 350px;
+  }
+  
+  .card.card-medium img {
+    height: 180px;
+    object-fit: cover;
+  }
+  
+  .card.card-large {
+    grid-column: span 2;
+    min-height: 400px;
+  }
+  
+  .card.card-large img {
+    height: 250px;
+    object-fit: cover;
+  }
+  
+  @media (max-width: 768px) {
+    .card.card-large {
+      grid-column: span 1;
+    }
+  }
+</style>
+
+<section class="ads-slider">
+  <div class="slide active"><img src="/static/images/ads1.svg" alt="Ad 1" /></div>
+  <div class="slide"><img src="/static/images/ads2.svg" alt="Ad 2" /></div>
+</section>
+
+<section class="hero">
+  <h2>Shop best sellers</h2>
+  <p>Discover top-rated products and great deals</p>
+</section>
+
+<section class="featured">
+  <h3>Featured Products</h3>
+  <div class="featured-controls">
+    <button class="featured-prev">◀</button>
+    <button class="featured-next">▶</button>
+  </div>
+  <div class="featured-track">
+    
+  </div>
+</section>
+
+<section id="products" class="products">
+  <div class="grid">
+    
+    <div class="card card-medium">
+      <img src="/static/images/product-bg.svg" alt="PS Test" />
+      <h4>PS Test</h4>
+      <p>pst</p>
+      <p class="price">GH₵100.00 </p>
+      <form action="/cart/add/1" method="post" aria-label="Add PS Test to cart">
+        <label for="qty-1" class="sr-only">Quantity for PS Test</label>
+        <input id="qty-1" type="number" name="qty" value="1" min="1" title="Quantity" placeholder="Qty" aria-label="Quantity" />
+        <button class="btn" type="submit">Add to cart</button>
+      </form>
+      <a href="/product/1" class="btn-outline">View</a>
+    </div>
+    
+  </div>
+</section>
+
+    </main>
+    
+    <footer class="site-footer">
+      <div class="container">© 2025 CyberWorld</div>
+    </footer>
+    
+    <script>
+      // Mobile nav toggle
+      document.addEventListener('DOMContentLoaded', function(){
+        const toggle = document.getElementById('mobile-menu-toggle');
+          const nav = document.querySelector('.main-nav');
+          const panel = nav ? nav.querySelector('.nav-panel') : null;
+          if (toggle && nav) {
+            toggle.addEventListener('click', () => {
+              nav.classList.toggle('open');
+              if (panel) {
+                const isOpen = nav.classList.contains('open');
+                panel.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+              }
+            });
+          }
+      })
+
+      // Simple autoslider for ads (rotates images)
+      document.addEventListener('DOMContentLoaded', function(){
+        // Ads slider
+        const ads = document.querySelectorAll('.ads-slider .slide');
+        let adIndex = 0;
+        if (ads.length > 0) {
+          setInterval(() => {
+            ads[adIndex].classList.remove('active');
+            adIndex = (adIndex + 1) % ads.length;
+            ads[adIndex].classList.add('active');
+          }, 4000);
+        }
+
+        // Featured product slider controls
+        const prevBtn = document.querySelector('.featured-prev');
+        const nextBtn = document.querySelector('.featured-next');
+        const track = document.querySelector('.featured-track');
+        if (prevBtn && nextBtn && track) {
+          const cardWidth = track.querySelector('.card').offsetWidth + 16;
+          prevBtn.addEventListener('click', () => { track.scrollBy({ left: -cardWidth, behavior: 'smooth' }); });
+          nextBtn.addEventListener('click', () => { track.scrollBy({ left: cardWidth, behavior: 'smooth' }); });
+        }
+      });
+
+        // Cart count population: fetch /cart and parse quantities from the cart table
+        document.addEventListener('DOMContentLoaded', function(){
+          const cartCountEl = document.querySelector('.cart-count');
+          function setCartCount(n){
+            if (!cartCountEl) return;
+            if (!n || Number(n) === 0) {
+              cartCountEl.textContent = '';
+              cartCountEl.style.display = 'none';
+              return;
+            }
+            cartCountEl.textContent = String(n);
+            cartCountEl.style.display = 'inline-block';
+          }
+
+          async function fetchCartCount(){
+              try {
+                // Prefer the compact JSON endpoint, fallback to scraping /cart
+                const resJson = await fetch('/api/cart-count', { credentials: 'same-origin' });
+                if (resJson && resJson.ok) {
+                  const data = await resJson.json();
+                  if (data && typeof data.count !== 'undefined') {
+                    return setCartCount(Number(data.count) || 0);
+                  }
+                }
+                const res = await fetch('/cart', { credentials: 'same-origin' });
+                if (!res.ok) return setCartCount(0);
+                const text = await res.text();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(text, 'text/html');
+              // Try to find the cart table and qty inputs
+              let count = 0;
+              const qtyInputs = doc.querySelectorAll('input[name^="qty_"]');
+              if (qtyInputs && qtyInputs.length) {
+                qtyInputs.forEach(i => { try { count += Number(i.value || 0); } catch(e){} });
+              } else {
+                // Try to detect rows in cart-table
+                const rows = doc.querySelectorAll('.cart-table tbody tr');
+                if (rows && rows.length) {
+                  rows.forEach(r => {
+                    const input = r.querySelector('input[type="number"]');
+                    if (input) { try { count += Number(input.value || 0); } catch(e){} }
+                  });
+                  // if still zero, fallback to number of rows
+                  if (count === 0) count = rows.length;
+                } else {
+                  // If cart page shows "Your cart is empty." then 0
+                  if (text.includes('Your cart is empty')) count = 0;
+                }
+              }
+              setCartCount(count || 0);
+            } catch (err) {
+              // on error don't fail silently; hide count
+              setCartCount(0);
+            }
+          }
+
+          // Update count on load and periodically (in case of client-side changes)
+          fetchCartCount();
+          // Also listen for clicks on add-to-cart buttons to provide instant feedback (best-effort)
+          document.body.addEventListener('submit', function(e){
+            const form = e.target;
+            if (!form || !(form instanceof HTMLFormElement)) return;
+            if (form.action && form.action.includes('/cart/add')) {
+              // Try to update local room: read qty and update displayed value
+              const formQty = form.querySelector('input[name="qty"], input[type="number"]');
+              let qty = 1;
+              if (formQty && formQty.value) {
+                qty = Number(formQty.value) || 1;
+              }
+              // Attempt to read the current count displayed and increment it
+              const cur = Number(cartCountEl ? (cartCountEl.textContent || '0') : '0') || 0;
+              setCartCount(cur + qty);
+            }
+          }, true);
+
+          // Poll occasionally (every 30s) to keep the header count accurate for long-lived pages
+          setInterval(fetchCartCount, 30000);
+        });
+    </script>
+  </body>
+</html>
