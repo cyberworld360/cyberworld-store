@@ -1157,6 +1157,7 @@ def _send_via_sendgrid(to_address: str, subject: str, body: str, html_body = Non
         from_addr = MAIL_USERNAME or ADMIN_EMAIL or 'no-reply@cyberworldstore.shop'
         from_name = 'CYBER WORLD STORE'
 
+    callback_url = PAYSTACK_CALLBACK or url_for('paystack_callback', _external=True)
     payload = {
         "personalizations": [{"to": [{"email": to_address}], "subject": subject}],
         "from": {"email": from_addr, "name": (from_name or 'CYBER WORLD STORE')},
@@ -1686,7 +1687,7 @@ def paystack_init():
         "email": email,
         "amount": amount_minor,
         "reference": reference,
-        "callback_url": PAYSTACK_CALLBACK,
+        "callback_url": callback_url,
         "metadata": {
             "cart": items,
             "name": name,
@@ -1766,11 +1767,12 @@ def paystack_init_url():
     initialize_url = "https://api.paystack.co/transaction/initialize"
     headers = {"Authorization": f"Bearer {PAYSTACK_SECRET}", "Content-Type": "application/json"}
     reference = str(uuid.uuid4())
+    callback_url = PAYSTACK_CALLBACK or url_for('paystack_callback', _external=True)
     payload = {
         "email": email,
         "amount": amount_minor,
         "reference": reference,
-        "callback_url": PAYSTACK_CALLBACK,
+        "callback_url": callback_url,
         "metadata": {
             "cart": items,
             "name": name,
