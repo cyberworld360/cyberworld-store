@@ -1054,6 +1054,11 @@ def get_settings():
             app.logger.warning("Could not query Settings (db schema mismatch): %s", e)
         except Exception:
             pass
+        # Attempt to rollback any failed session state, then persist last traceback
+        try:
+            _safe_db_rollback_and_close()
+        except Exception:
+            pass
         # Persist last traceback for easier debugging in serverless/production
         try:
             import traceback
@@ -1094,7 +1099,26 @@ def money_filter(value):
 
 @app.context_processor
 def inject_now():
-    settings = get_settings()
+    """Context processor: return the time, paystack public key, and settings.
+    This wraps `get_settings()` in a try/except to avoid errors bubbling into
+    templates (which causes 500 recursion when DB sessions are in failed state).
+    """
+    try:
+        settings = get_settings()
+    except Exception as e:
+        # If getting settings fails (DB error, in failed transaction), ensure that
+        # we don't propagate the exception to the template render which may call
+        # the same backend and cause recursion.
+        try:
+            app.logger.exception('Context processor: get_settings failed: %s', e)
+        except Exception:
+            pass
+        try:
+            _safe_db_rollback_and_close()
+        except Exception:
+            pass
+        # Provide a transient in-memory Settings instance so templates can render
+        settings = Settings()
     return {"now": utc_now(), "PAYSTACK_PUBLIC": PAYSTACK_PUBLIC, "settings": settings}
 
 
