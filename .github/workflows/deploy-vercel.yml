@@ -44,6 +44,7 @@ jobs:
             --env MAIL_USE_SSL="${{ secrets.MAIL_USE_SSL }}" \
             --env MAIL_DEFAULT_SENDER="${{ secrets.MAIL_DEFAULT_SENDER }}" \
             --env ADMIN_EMAIL="${{ secrets.ADMIN_EMAIL }}" \
+            --env DATABASE_URL="${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}" \
             --token $VERCEL_TOKEN
 
       - name: Get deployment URL

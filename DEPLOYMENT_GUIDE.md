@@ -118,6 +118,30 @@ After=network.target
 
 [Service]
 User=root
+
+---
+
+## Staging & Migration Guidance (New)
+
+This project includes CI workflows that will run database migrations automatically before deploying, and a dedicated staging workflow to exercise changes before production.
+
+1) Add GitHub Secrets (recommended):
+    - `VERCEL_TOKEN`, `VERCEL_PROJECT_ID_STAGING`, `VERCEL_PROJECT_ID` (prod), `VERCEL_ORG_ID`
+    - `DATABASE_URL_STAGING` (staging DB), `DATABASE_URL` (production DB) - used by `flask db upgrade`.
+    - `ERROR_VIEW_TOKEN` - a short secret token (e.g., 32 characters) that the app will use to authorize `/__last_error` diagnostic fetches.
+
+2) Staging Deployment:
+    - The `deploy-staging.yml` workflow will sync the `ERROR_VIEW_TOKEN` to Vercel (preview target) and run `flask db upgrade` using `DATABASE_URL_STAGING` if present.
+    - After staging deploy, run smoke tests using `scripts/ci_smoke_test.py` and `scripts/live_post_admin_settings.py` to verify admin settings and common endpoints.
+
+3) Production Deployment Safety:
+    - The `deploy.yml` workflow now runs a migration step before production deploy. This step runs `flask db upgrade` using `DATABASE_URL` to apply alembic migrations.
+    - If your DB has been modified manually (columns added outside of migrations), ensure alembic's version table is in-sync or use `flask db stamp` with caution.
+
+4) If the admin settings POST returns HTTP 500:
+    - Fetch the last server traceback with `/__last_error?token=<ERROR_VIEW_TOKEN>` (if `ERROR_VIEW_TOKEN` is configured). This prints the last stack trace persisted to `/tmp/last_error.txt` on the server.
+    - Share the trace and I can patch any errors (lines, models, types) promptly.
+
 WorkingDirectory=/root/cyberworld_paystack_clone_final
 ExecStart=/root/cyberworld_paystack_clone_final/venv/bin/gunicorn --workers 4 --bind 0.0.0.0:5000 app:app
 

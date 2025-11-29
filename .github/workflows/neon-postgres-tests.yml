@@ -1,0 +1,62 @@
+name: Neon Postgres Integration Test
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ fix/admin-settings-500 ]
+
+jobs:
+  test-neon:
+    # Run Neon-based integration tests when NEON_DATABASE_URL is provided in secrets
+    if: ${{ secrets.NEON_DATABASE_URL != '' }}
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.13'
+    - name: Setup venv
+      run: |
+        python -m venv .venv
+        . .venv/bin/activate
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt || true
+        pip install pg8000
+    - name: Export Neon DB URL for SQLAlchemy using pg8000
+      run: |
+        NEON_URL="${{ secrets.NEON_DATABASE_URL }}"
+        # Ensure URI uses postgresql+pg8000 scheme so SQLAlchemy loads pg8000
+        DBURL=$(echo "$NEON_URL" | sed -e 's|^postgres://|postgresql+pg8000://|' -e 's|^postgresql://|postgresql+pg8000://|')
+        echo "DATABASE_URL=$DBURL" >> $GITHUB_ENV
+        echo "FLASK_APP=app.py" >> $GITHUB_ENV
+    - name: Run DB migrations (Neon)
+      env:
+        DATABASE_URL: ${{ env.DATABASE_URL }}
+        FLASK_APP: app.py
+      run: |
+        python -m flask db upgrade
+    - name: Run targeted tests (Neon)
+      env:
+        DATABASE_URL: ${{ env.DATABASE_URL }}
+        FLASK_APP: app.py
+      run: |
+        pytest -q test_admin_settings_pg8000_exception.py -q || (echo 'PyTest exit code: $?' && exit 1)
+    - name: Dump /tmp/last_error.txt (if exists)
+      env:
+        DATABASE_URL: ${{ env.DATABASE_URL }}
+        FLASK_APP: app.py
+      run: |
+        if [ -f /tmp/last_error.txt ]; then
+          echo '--- /tmp/last_error.txt content ---'
+          cat /tmp/last_error.txt
+        else
+          echo '/tmp/last_error.txt not found'
+        fi
+    - name: Upload last_error artifact (if exists)
+      uses: actions/upload-artifact@v4
+      with:
+        name: last_error
+        path: /tmp/last_error.txt
+        if-no-files-found: ignore

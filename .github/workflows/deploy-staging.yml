@@ -1,0 +1,102 @@
+name: Deploy to Vercel (Staging)
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy-staging:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m venv .venv
+        source .venv/bin/activate
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Run tests (fast subset)
+      env:
+        DATABASE_URL: sqlite:///./data.db
+        FORCE_EPHEMERAL: '1'
+        MAIL_SERVER: ''
+        MAIL_USERNAME: ''
+        MAIL_PASSWORD: ''
+        PAYSTACK_PUBLIC: ''
+        PAYSTACK_SECRET: ''
+        SENDGRID_API_KEY: ''
+      run: |
+        source .venv/bin/activate
+        python -m pytest -q -k "not e2e and not paystack and not email"
+
+    - name: Ensure Vercel staging envs
+      if: ${{ secrets.VERCEL_TOKEN && secrets.VERCEL_PROJECT_ID_STAGING }}
+      env:
+        VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID_STAGING }}
+        ERROR_VIEW_TOKEN: ${{ secrets.ERROR_VIEW_TOKEN || '' }}
+      run: |
+        set -euo pipefail
+        if ! command -v jq >/dev/null 2>&1; then
+          sudo apt-get update && sudo apt-get install -y jq
+        fi
+        PROJECT_ID="$VERCEL_PROJECT_ID"
+        TOKEN="$VERCEL_TOKEN"
+        declare -A mapping
+        mapping[ERROR_VIEW_TOKEN]="$ERROR_VIEW_TOKEN"
+        for key in "${!mapping[@]}"; do
+          value="${mapping[$key]}"
+          if [ -z "$value" ]; then
+            echo "Skipping $key (empty)"
+            continue
+          fi
+          id=$(curl -s -H "Authorization: Bearer $TOKEN" "https://api.vercel.com/v8/projects/$PROJECT_ID/env" | jq -r --arg key "$key" '.env | map(select(.key==$key)) | .[0].id // empty')
+          if [ -n "$id" ]; then
+            echo "Updating existing env var $key (id=$id)"
+            curl -s -X DELETE -H "Authorization: Bearer $TOKEN" "https://api.vercel.com/v8/projects/$PROJECT_ID/env/$id"
+          else
+            echo "Adding new env var $key"
+          fi
+          curl -s -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d "{\"key\":\"$key\",\"value\":\"$value\",\"target\":[\"preview\"]}" "https://api.vercel.com/v8/projects/$PROJECT_ID/env"
+        done
+
+    - name: Run DB migrations to staging
+      if: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL_STAGING }}
+      env:
+        NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || '' }}
+        DATABASE_URL: ${{ secrets.DATABASE_URL_STAGING || '' }}
+        FLASK_APP: app.py
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        DBURL="${NEON_DATABASE_URL:-${DATABASE_URL}}"
+        export SQLALCHEMY_DATABASE_URI="$DBURL"
+        python -m flask db upgrade
+
+    - name: Deploy to Vercel (staging)
+      uses: amondnet/vercel-action@v20
+      with:
+        vercel-token: ${{ secrets.VERCEL_TOKEN }}
+        vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+        vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID_STAGING }}
+        vercel-args: ''
+      env:
+        VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+    - name: Run CI Smoke Tests (staging)
+      env:
+        DEPLOY_URL: ${{ secrets.DEPLOY_URL_STAGING }}
+        ADMIN_USER: ${{ secrets.ADMIN_USER }}
+        ADMIN_PASS: ${{ secrets.ADMIN_PASS }}
+      run: |
+        if [ -z "${DEPLOY_URL}" ]; then
+          echo "ERROR: DEPLOY_URL_STAGING secret not set"; exit 1
+        fi
+        python scripts/ci_smoke_test.py

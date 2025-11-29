@@ -20,27 +20,48 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          # Ensure pg8000 is installed so SQLAlchemy pg8000 dialect can be used
+          pip install pg8000
 
       - name: Verify DB Connectivity
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || '' }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL || '' }}
           FLASK_APP: app.py
         run: |
-          if [ -z "${DATABASE_URL}" ]; then
-            echo "ERROR: DATABASE_URL is not set in secrets"; exit 1
+          # Prefer NEON_DATABASE_URL if provided, otherwise fall back to DATABASE_URL
+          DBURL="${NEON_DATABASE_URL:-${DATABASE_URL}}"
+          # Rewrite postgres scheme to pg8000 dialect so SQLAlchemy uses pg8000 in CI
+          DBURL=$(echo "$DBURL" | sed -e 's|^postgres://|postgresql+pg8000://|' -e 's|^postgresql://|postgresql+pg8000://|')
+          if [ -z "${DBURL}" ]; then
+            echo "ERROR: DATABASE_URL (or NEON_DATABASE_URL) is not set in secrets"; exit 1
           fi
+          export DATABASE_URL="$DBURL"
           python scripts/check_db.py
 
       - name: Run DB Migrations
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || '' }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL || '' }}
           FLASK_APP: app.py
         run: |
-          if [ -z "${DATABASE_URL}" ]; then
-            echo "ERROR: DATABASE_URL is not set in secrets"; exit 1
+          # Prefer NEON_DATABASE_URL if provided, otherwise fall back to DATABASE_URL
+          DBURL="${NEON_DATABASE_URL:-${DATABASE_URL}}"
+          # Rewrite to pg8000 dialect if necessary for SQLAlchemy
+          DBURL=$(echo "$DBURL" | sed -e 's|^postgres://|postgresql+pg8000://|' -e 's|^postgresql://|postgresql+pg8000://|')
+          if [ -z "${DBURL}" ]; then
+            echo "ERROR: DATABASE_URL (or NEON_DATABASE_URL) is not set in secrets"; exit 1
           fi
+          export DATABASE_URL="$DBURL"
           export SQLALCHEMY_DATABASE_URI="$DATABASE_URL"
           python -m flask db upgrade
+      - name: Upload last_error artifact if present
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: last_error_migrate
+          path: /tmp/last_error.txt
+          if-no-files-found: ignore
 
   smoke:
     name: Smoke Tests
@@ -69,3 +90,10 @@ jobs:
             echo "ERROR: DEPLOY_URL secret not set"; exit 1
           fi
           python scripts/ci_smoke_test.py
+      - name: Upload last_error artifact if present (smoke)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: last_error_smoke
+          path: /tmp/last_error.txt
+          if-no-files-found: ignore

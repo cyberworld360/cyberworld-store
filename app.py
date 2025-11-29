@@ -44,6 +44,7 @@ from email.utils import parseaddr
 import json as _json
 import logging
 import sys
+import tempfile
 
 # Optional modern integrations
 REDIS_URL = os.environ.get("REDIS_URL", "")
@@ -72,6 +73,15 @@ if os.environ.get("VERCEL") or os.environ.get("VERCEL_URL"):
 else:
     UPLOAD_FOLDER = BASE_DIR / "static" / "images"
 UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
+# Validate upload folder permissions and existence
+try:
+    if not UPLOAD_FOLDER.exists():
+        UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
+    test_file = UPLOAD_FOLDER / '.permcheck'
+    test_file.write_text('ok')
+    test_file.unlink()
+except Exception as e:
+    print(f"[WARNING] Failed to ensure UPLOAD_FOLDER exists or is writable: {UPLOAD_FOLDER} — {e}")
 
 # Helper function for timezone-aware UTC datetime
 def utc_now():
@@ -85,9 +95,53 @@ app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "change-me")
 _env_db = os.environ.get("SQLALCHEMY_DATABASE_URI", "").strip()
 _db_url = _env_db or os.environ.get("DATABASE_URL", "").strip()
 
+
+def _normalize_db_url_for_driver(db_url: str) -> str:
+    """Normalize DB URL for SQLAlchemy and drivers.
+
+    - Rewrite `postgres://` or `postgresql://` to `postgresql+pg8000://` when `psycopg2` is not installed
+      and `pg8000` is present.
+    - Strip SSL query parameters (`sslmode`, `sslrootcert`, etc.) so drivers that don't accept
+      those kwargs (like `pg8000`) don't choke at connect() time. The SSL config will be passed
+      via SQLAlchemy `SQLALCHEMY_ENGINE_OPTIONS` separately in `_safe_initialize_extensions`.
+    """
+    try:
+        import importlib.util
+        if not db_url:
+            return db_url
+        is_postgres = db_url.startswith("postgres://") or db_url.startswith("postgresql://")
+        if not is_postgres:
+            return db_url
+        have_psycopg2 = importlib.util.find_spec("psycopg2") is not None or importlib.util.find_spec("psycopg2_binary") is not None
+        have_pg8000 = importlib.util.find_spec("pg8000") is not None
+        if not have_psycopg2 and have_pg8000:
+            # Rewrite scheme to use pg8000
+            if db_url.startswith("postgres://"):
+                db_url = "postgresql+pg8000://" + db_url[len("postgres://"):]
+            elif db_url.startswith("postgresql://"):
+                db_url = "postgresql+pg8000://" + db_url[len("postgresql://"):]
+        # Strip SSL related query params from the URL string; the SSL context will be added later.
+        try:
+            parsed_any = urllib.parse.urlsplit(db_url)
+            qs_any = urllib.parse.parse_qs(parsed_any.query, keep_blank_values=True)
+            ssl_keys = [k for k in list(qs_any.keys()) if k.lower().startswith('ssl')]
+            if ssl_keys:
+                for k in ssl_keys:
+                    qs_any.pop(k, None)
+                clean_q_any = urllib.parse.urlencode({k: v[0] for k, v in qs_any.items()})
+                db_url = urllib.parse.urlunsplit((parsed_any.scheme, parsed_any.netloc, parsed_any.path, clean_q_any, parsed_any.fragment))
+        except Exception:
+            pass
+        return db_url
+    except Exception:
+        return db_url
+
 if _db_url:
     # Use explicit database URL from environment
-    app.config["SQLALCHEMY_DATABASE_URI"] = _db_url
+    try:
+        app.config["SQLALCHEMY_DATABASE_URI"] = _normalize_db_url_for_driver(_db_url)
+    except Exception:
+        app.config["SQLALCHEMY_DATABASE_URI"] = _db_url
 elif os.environ.get("VERCEL") or os.environ.get("VERCEL_URL"):
     # Running on Vercel in production without a persistent DATABASE_URL
     # is dangerous: /tmp is ephemeral and data will be lost between deployments.
@@ -317,6 +371,17 @@ def init_db_on_first_request():
                 db.create_all()
             # Ensure Settings table has all expected columns
             _ensure_settings_columns()
+            # Quick connectivity check — attempt a simple query using the engine
+            try:
+                from sqlalchemy import text
+                with db.engine.connect() as conn:
+                    conn.execute(text("SELECT 1"))
+                app.logger.info('Database connectivity check: OK')
+            except Exception as dc_exc:
+                try:
+                    app.logger.warning('Database connectivity check failed: %s', dc_exc)
+                except Exception:
+                    print(f"[db check] connectivity failed: {dc_exc}")
             # Ensure default admin user exists
             if not AdminUser.query.filter_by(username="Cyberjnr").first():
                 try:
@@ -324,8 +389,26 @@ def init_db_on_first_request():
                     admin.username = "Cyberjnr"
                     admin.set_password("GITG360$")
                     db.session.add(admin)
-                    db.session.commit()
-                    app.logger.info("Created default admin user: Cyberjnr")
+                    try:
+                        db.session.commit()
+                        app.logger.info("Created default admin user: Cyberjnr")
+                    except Exception as commit_exc:
+                        # Handle rare race/unique-constraint situations gracefully
+                        try:
+                            from sqlalchemy.exc import IntegrityError
+                            if isinstance(commit_exc, IntegrityError) or (hasattr(commit_exc, '__cause__') and isinstance(commit_exc.__cause__, IntegrityError)):
+                                try:
+                                    db.session.rollback()
+                                except Exception:
+                                    pass
+                                app.logger.info('Default admin already exists (race or duplicate), continuing')
+                            else:
+                                raise
+                        except Exception:
+                            try:
+                                app.logger.exception("Failed to commit default admin: %s", commit_exc)
+                            except Exception:
+                                print(f"[db init] Failed to commit default admin: {commit_exc}")
                 except Exception as e:
                     try:
                         app.logger.exception("Failed to create default admin: %s", e)
@@ -439,12 +522,17 @@ def handle_internal_server_error(e):
     try:
         app.logger.error("Unhandled exception: %s\n%s", e, tb)
     except Exception:
-        print("[500 error]", e)
-        print(tb)
+        # Logger may be unavailable in some environments; write to stderr as a safe fallback
+        try:
+            import sys
+            sys.stderr.write(f"[500 error] {e}\n")
+            sys.stderr.write(tb + "\n")
+        except Exception:
+            pass
     # Return a friendly error page while logging details
     # Persist last traceback to a temporary file (serverless writable path)
     try:
-        last_err_path = '/tmp/last_error.txt'
+        last_err_path = str(Path(tempfile.gettempdir()) / 'last_error.txt')
         with open(last_err_path, 'w', encoding='utf-8') as fh:
             fh.write(f"Time: {utc_now().isoformat()}\n")
             fh.write(str(e) + "\n\n")
@@ -455,8 +543,19 @@ def handle_internal_server_error(e):
         except Exception:
             pass
 
+    # Clear any failed DB transaction state to prevent subsequent 'in failed transaction block' errors
     try:
-        return render_template('500.html', error=str(e)), 500
+        _safe_db_rollback_and_close()
+    except Exception:
+        pass
+
+    try:
+        # When debugging, show the full traceback in the 500 page for easier local debugging.
+        # In production (app.debug is False), avoid exposing full tracebacks to users; use the short message.
+        err_to_show = tb if getattr(app, 'debug', False) else None
+        # If a secure token is configured, show a hint so admins can fetch the persisted traceback via /__last_error
+        show_last_err_instructions = bool(os.environ.get('ERROR_VIEW_TOKEN'))
+        return render_template('500.html', error=err_to_show or str(e), show_last_err_instructions=show_last_err_instructions), 500
     except Exception:
         return ("Internal Server Error", 500)
 
@@ -468,7 +567,7 @@ def __last_error():
     expected = os.environ.get('ERROR_VIEW_TOKEN')
     if not expected or token != expected:
         abort(403)
-    last_err_path = '/tmp/last_error.txt'
+    last_err_path = str(Path(tempfile.gettempdir()) / 'last_error.txt')
     try:
         with open(last_err_path, 'r', encoding='utf-8') as fh:
             content = fh.read()
@@ -685,10 +784,11 @@ class Settings(db.Model):
     """Store site-wide settings like logo, banner, fonts, etc"""
     id = db.Column(db.Integer, primary_key=True)
     # Image paths (fallback for old uploads or external URLs)
-    logo_image = db.Column(db.String(300), default='/static/images/logo.svg')
-    banner1_image = db.Column(db.String(300), default='/static/images/ads1.svg')
-    banner2_image = db.Column(db.String(300), default='/static/images/ads2.svg')
-    bg_image = db.Column(db.String(300), default='/static/images/product-bg.svg')
+    # Increase URL column lengths to allow long S3 URLs (some buckets and presigned urls exceed 300 chars)
+    logo_image = db.Column(db.String(1000), default='/static/images/logo.svg')
+    banner1_image = db.Column(db.String(1000), default='/static/images/ads1.svg')
+    banner2_image = db.Column(db.String(1000), default='/static/images/ads2.svg')
+    bg_image = db.Column(db.String(1000), default='/static/images/product-bg.svg')
     # Base64-encoded image data (for persistent storage on Vercel's ephemeral /tmp)
     logo_image_data = db.Column(db.LargeBinary, nullable=True)  # Base64 or binary
     banner1_image_data = db.Column(db.LargeBinary, nullable=True)
@@ -713,7 +813,8 @@ class Settings(db.Model):
     logo_top_px = db.Column(db.Integer, default=0)
     logo_zindex = db.Column(db.Integer, default=9999)
     # Place cart on right side of header when True (opposite hamburger left)
-    cart_on_right = db.Column(db.Boolean, default=True)
+    # Default changed to False to swap the cart and hamburger menu positions by default
+    cart_on_right = db.Column(db.Boolean, default=False)
     # Custom CSS to allow admin to inject site-wide CSS overrides
     custom_css = db.Column(db.Text, default='')
     # Logo size and position controls
@@ -766,9 +867,9 @@ def load_user(user_id):
             except Exception:
                 rawid = None
             if kind == 'AdminUser' and rawid:
-                return AdminUser.query.get(rawid)
+                return db.session.get(AdminUser, rawid)
             elif kind == 'User' and rawid:
-                return User.query.get(rawid)
+                return db.session.get(User, rawid)
         else:
             # Legacy numeric-only id: check AdminUser then User
             uid = None
@@ -777,10 +878,10 @@ def load_user(user_id):
             except Exception:
                 pass
             if uid is not None:
-                admin = AdminUser.query.get(uid)
+                admin = db.session.get(AdminUser, uid)
                 if admin:
                     return admin
-                customer = User.query.get(uid)
+                customer = db.session.get(User, uid)
                 if customer:
                     return customer
     except Exception:
@@ -822,9 +923,81 @@ def decode_image_from_base64(b64_data, mime_type='image/jpeg'):
     return f"data:{mime_type};base64,{b64_str}"
 
 
+def _safe_db_rollback_and_close():
+        """Safely rollback and close the DB session to clear transaction state.
+
+        Use sparingly when encountering DB driver errors to ensure the SQLAlchemy
+        session is reset and subsequent requests or operations do not stay in a
+        failed transaction state (which triggers 'in failed transaction block').
+        """
+        try:
+            db.session.rollback()
+        except Exception:
+            try:
+                import sys
+                sys.stderr.write("db.session.rollback() failed\n")
+            except Exception:
+                pass
+        try:
+            db.session.close()
+        except Exception:
+            try:
+                import sys
+                sys.stderr.write("db.session.close() failed\n")
+            except Exception:
+                pass
+
+
 def is_s3_configured():
     """Return True if AWS S3 env vars are present to enable S3 uploads."""
     return bool(os.environ.get('AWS_S3_BUCKET') and os.environ.get('AWS_ACCESS_KEY_ID') and os.environ.get('AWS_SECRET_ACCESS_KEY'))
+
+
+def _is_upload_folder_writable() -> bool:
+    """Return True if app upload folder is writable. Attempts a small write to ensure permissions."""
+    try:
+        folder = Path(app.config.get('UPLOAD_FOLDER', ''))
+        if not folder.exists():
+            folder.mkdir(parents=True, exist_ok=True)
+        test_path = folder / ('.permcheck_upload_' + str(int(time.time())))
+        test_path.write_text('ok')
+        test_path.unlink()
+        return True
+    except Exception:
+        return False
+
+
+def _save_uploaded_file(file_obj, filename, mime_type=None) -> str:
+    """Save an uploaded file to local `UPLOAD_FOLDER` or, if not writable and S3 configured,
+    fallback to S3 and return the public URL/path for the saved file. Returns the chosen
+    path (local /uploads/images/<filename> or S3 URL). Raises on fatal errors when neither
+    option is available.
+    """
+    folder = Path(app.config.get('UPLOAD_FOLDER', ''))
+    local_path = folder / filename
+    # Ensure bucket path for S3
+    s3_key = f"uploads/images/{filename}"
+    # First try local write if possible
+    if _is_upload_folder_writable():
+        try:
+            file_obj.seek(0)
+            # werkzeug FileStorage has save
+            file_obj.save(local_path)
+            return f"/uploads/images/{filename}"
+        except Exception:
+            # fallthrough to S3
+            pass
+    # If local save failed or not writable, try S3
+    if is_s3_configured():
+        try:
+            file_obj.seek(0)
+            url = upload_to_s3(file_obj, s3_key, mime_type=mime_type)
+            if url:
+                return url
+        except Exception:
+            pass
+    # If we've reached here, nothing worked
+    raise IOError('Failed to save uploaded file locally or to S3')
 
 
 def upload_to_s3(file_obj, key, mime_type=None):
@@ -881,6 +1054,21 @@ def get_settings():
             app.logger.warning("Could not query Settings (db schema mismatch): %s", e)
         except Exception:
             pass
+        # Persist last traceback for easier debugging in serverless/production
+        try:
+            import traceback
+            tb = traceback.format_exc()
+            last_err_path = str(Path(tempfile.gettempdir()) / 'last_error.txt')
+            with open(last_err_path, 'w', encoding='utf-8') as fh:
+                fh.write(f"Time: {utc_now().isoformat()}\n")
+                fh.write(str(e) + '\n\n')
+                fh.write(tb)
+        except Exception:
+            # If we can't persist to /tmp, do not crash the app
+            try:
+                app.logger.exception('Failed to write last_error file')
+            except Exception:
+                pass
         return Settings()
 
     if not settings:
@@ -891,7 +1079,7 @@ def get_settings():
         except Exception:
             # If commit fails (schema), swallow and return transient settings
             try:
-                db.session.rollback()
+                _safe_db_rollback_and_close()
             except Exception:
                 pass
             return settings
@@ -987,6 +1175,7 @@ def _send_via_sendgrid(to_address: str, subject: str, body: str, html_body = Non
         from_addr = MAIL_USERNAME or ADMIN_EMAIL or 'no-reply@cyberworldstore.shop'
         from_name = 'CYBER WORLD STORE'
 
+    callback_url = PAYSTACK_CALLBACK or url_for('paystack_callback', _external=True)
     payload = {
         "personalizations": [{"to": [{"email": to_address}], "subject": subject}],
         "from": {"email": from_addr, "name": (from_name or 'CYBER WORLD STORE')},
@@ -1285,7 +1474,10 @@ def _retry_failed_emails_loop(interval: int = 60, max_attempts: int = 5):
                             fe.last_attempt_at = utc_now()
                             db.session.commit()
                     except Exception:
-                        db.session.rollback()
+                        try:
+                            _safe_db_rollback_and_close()
+                        except Exception:
+                            pass
                         try:
                             app.logger.exception("Error retrying failed email id=%s", fe.id)
                         except Exception:
@@ -1406,7 +1598,7 @@ def view_cart():
             pid = int(pid_str); qty = int(qty)
         except Exception:
             continue
-        p = Product.query.get(pid)
+        p = db.session.get(Product, pid)
         if not p:
             continue
         subtotal = Decimal(p.price_ghc) * qty
@@ -1468,7 +1660,7 @@ def paystack_init():
     items = []
     for pid_str, qty in cart.items():
         pid = int(pid_str); qty = int(qty)
-        p = Product.query.get(pid)
+        p = db.session.get(Product, pid)
         if not p: continue
         subtotal = Decimal(p.price_ghc) * qty
         total += subtotal
@@ -1485,7 +1677,7 @@ def paystack_init():
     applied_coupon = None
     if coupon_id:
         try:
-            coupon = Coupon.query.get(int(coupon_id))
+            coupon = db.session.get(Coupon, int(coupon_id))
             if coupon:
                 valid, msg = coupon.is_valid()
                 if valid:
@@ -1508,12 +1700,13 @@ def paystack_init():
 
     initialize_url = "https://api.paystack.co/transaction/initialize"
     headers = {"Authorization": f"Bearer {PAYSTACK_SECRET}", "Content-Type": "application/json"}
+    callback_url = PAYSTACK_CALLBACK or url_for('paystack_callback', _external=True)
     reference = str(uuid.uuid4())
     payload = {
         "email": email,
         "amount": amount_minor,
         "reference": reference,
-        "callback_url": PAYSTACK_CALLBACK,
+        "callback_url": callback_url,
         "metadata": {
             "cart": items,
             "name": name,
@@ -1535,6 +1728,7 @@ def paystack_init():
         if data.get("status") and data.get("data") and data["data"].get("authorization_url"):
             # store pending payment info (email and items) to verify after redirect
             session["pending_payment"] = {"reference": reference, "amount": amount_minor, "email": email, "items": items, "coupon_id": int(coupon_id) if coupon_id else None, "discount": str(discount)}
+            session.modified = True
             return redirect(data["data"]["authorization_url"])
         else:
             flash("Failed to initialize Paystack payment: " + str(data.get("message", "unknown")), "danger")
@@ -1563,7 +1757,7 @@ def paystack_init_url():
     items = []
     for pid_str, qty in cart.items():
         pid = int(pid_str); qty = int(qty)
-        p = Product.query.get(pid)
+        p = db.session.get(Product, pid)
         if not p: continue
         subtotal = Decimal(p.price_ghc) * qty
         total += subtotal
@@ -1577,7 +1771,7 @@ def paystack_init_url():
     discount = Decimal('0')
     if coupon_id:
         try:
-            coupon = Coupon.query.get(int(coupon_id))
+            coupon = db.session.get(Coupon, int(coupon_id))
             if coupon:
                 valid, msg = coupon.is_valid()
                 if valid and total >= Decimal(str(coupon.min_amount)):
@@ -1593,11 +1787,12 @@ def paystack_init_url():
     initialize_url = "https://api.paystack.co/transaction/initialize"
     headers = {"Authorization": f"Bearer {PAYSTACK_SECRET}", "Content-Type": "application/json"}
     reference = str(uuid.uuid4())
+    callback_url = PAYSTACK_CALLBACK or url_for('paystack_callback', _external=True)
     payload = {
         "email": email,
         "amount": amount_minor,
         "reference": reference,
-        "callback_url": PAYSTACK_CALLBACK,
+        "callback_url": callback_url,
         "metadata": {
             "cart": items,
             "name": name,
@@ -1617,6 +1812,7 @@ def paystack_init_url():
         data = r.json()
         if data.get("status") and data.get("data") and data["data"].get("authorization_url"):
             session["pending_payment"] = {"reference": reference, "amount": amount_minor, "email": email, "items": items, "coupon_id": int(coupon_id) if coupon_id else None, "discount": str(discount)}
+            session.modified = True
             return jsonify({'status': 'success', 'authorization_url': data['data']['authorization_url'], 'reference': reference}), 200
         else:
             return jsonify({'status': 'error', 'message': 'Failed to initialize Paystack payment.'}), 500
@@ -1639,7 +1835,7 @@ def wallet_payment():
     items = []
     for pid_str, qty in cart.items():
         pid = int(pid_str); qty = int(qty)
-        p = Product.query.get(pid)
+        p = db.session.get(Product, pid)
         if not p: continue
         subtotal = Decimal(p.price_ghc) * qty
         total += subtotal
@@ -1662,7 +1858,7 @@ def wallet_payment():
     applied_coupon = None
     if coupon_id:
         try:
-            coupon = Coupon.query.get(int(coupon_id))
+            coupon = db.session.get(Coupon, int(coupon_id))
             if coupon:
                 valid, msg = coupon.is_valid()
                 if valid:
@@ -1754,7 +1950,7 @@ def wallet_payment():
                     item_dict = dict(it)
                     # Get product to fetch image_path
                     if it.get('product_id'):
-                        p = Product.query.get(it.get('product_id'))
+                        p = db.session.get(Product, it.get('product_id'))
                         if p:
                             item_dict['image_path'] = p.image if p.image else ''
                     items_with_images.append(item_dict)
@@ -1808,7 +2004,7 @@ def wallet_payment():
             for it in items:
                 item_dict = dict(it)
                 if it.get('product_id'):
-                    p = Product.query.get(it.get('product_id'))
+                    p = db.session.get(Product, it.get('product_id'))
                     if p:
                         item_dict['image_path'] = p.image if p.image else ''
                 items_with_images.append(item_dict)
@@ -1854,7 +2050,10 @@ def wallet_payment():
         flash("Payment successful via wallet. Thank you!", "success")
         return redirect(url_for("checkout_success"))
     except Exception as e:
-        db.session.rollback()
+        try:
+            _safe_db_rollback_and_close()
+        except Exception:
+            pass
         try:
             app.logger.exception("Wallet payment failed: %s", e)
         except Exception:
@@ -1894,7 +2093,7 @@ def paystack_callback():
                     for it in items:
                         item_dict = dict(it)
                         if it.get('product_id'):
-                            p = Product.query.get(it.get('product_id'))
+                            p = db.session.get(Product, it.get('product_id'))
                             if p:
                                 item_dict['image_path'] = p.image if p.image else ''
                         items_with_images.append(item_dict)
@@ -1947,7 +2146,7 @@ def paystack_callback():
                 for it in items:
                     item_dict = dict(it)
                     if it.get('product_id'):
-                        p = Product.query.get(it.get('product_id'))
+                        p = db.session.get(Product, it.get('product_id'))
                         if p:
                             item_dict['image_path'] = p.image if p.image else ''
                     items_with_images.append(item_dict)
@@ -2059,7 +2258,7 @@ def paystack_callback():
                 try:
                     coupon_id = pending.get('coupon_id')
                     if coupon_id:
-                        c = Coupon.query.get(int(coupon_id))
+                        c = db.session.get(Coupon, int(coupon_id))
                         if c:
                             c.current_uses = (c.current_uses or 0) + 1
                 except Exception:
@@ -2075,10 +2274,14 @@ def paystack_callback():
                 db.session.commit()
             except Exception:
                 try:
-                    db.session.rollback()
+                    _safe_db_rollback_and_close()
                     app.logger.exception("Failed to persist paystack order")
                 except Exception:
-                    print("[paystack order persist error]")
+                    try:
+                        import sys
+                        sys.stderr.write("[paystack order persist error]\n")
+                    except Exception:
+                        pass
 
             # Clear session (prevent double-payment if callback is called multiple times)
             session.pop("cart", None)
@@ -2244,7 +2447,7 @@ def checkout():
     items = []; total = Decimal('0')
     for pid_str, qty in cart.items():
         pid = int(pid_str); qty = int(qty)
-        p = Product.query.get(pid)
+        p = db.session.get(Product, pid)
         if not p: continue
         subtotal = Decimal(p.price_ghc) * qty
         items.append({"product": p, "qty": qty, "subtotal": subtotal})
@@ -2316,19 +2519,26 @@ def admin_login():
         pass
     
     if request.method == 'POST':
-        username = request.form.get('username', '').strip()
-        password = request.form.get('password', '').strip()
+        try:
+            username = request.form.get('username', '').strip()
+            password = request.form.get('password', '').strip()
         
-        if not username or not password:
-            flash('Username and password are required.', 'danger')
-            return render_template('admin_login.html')
-        
-        user = AdminUser.query.filter_by(username=username).first()
-        if user and user.check_password(password):
-            login_user(user)
-            flash('Logged in as admin.', 'success')
-            return redirect(url_for('admin_index'))
-        flash('Invalid admin credentials.', 'danger')
+            if not username or not password:
+                flash('Username and password are required.', 'danger')
+                return render_template('admin_login.html')
+            
+            user = AdminUser.query.filter_by(username=username).first()
+            if user and user.check_password(password):
+                login_user(user)
+                flash('Logged in as admin.', 'success')
+                return redirect(url_for('admin_index'))
+            flash('Invalid admin credentials.', 'danger')
+        except Exception as e:
+            try:
+                app.logger.exception('Admin login error: %s', e)
+            except Exception:
+                print('Admin login exception:', e)
+            flash('Internal server error during admin login.', 'danger')
     return render_template('admin_login.html')
 
 @app.route('/admin/logout')
@@ -2369,7 +2579,34 @@ def register():
             flash('Registration successful! Please login.', 'success')
             return redirect(url_for('user_login'))
         except Exception as e:
-            db.session.rollback()
+            # Capture DB error during commit (if any), and persist details
+            import traceback
+            tb = traceback.format_exc()
+            try:
+                app.logger.exception('Error saving settings during commit: %s\n%s', e, tb)
+            except Exception:
+                try:
+                    import sys
+                    sys.stderr.write(f"Error saving settings during commit: {e}\n")
+                    sys.stderr.write(tb + "\n")
+                except Exception:
+                    pass
+            try:
+                last_err_path = str(Path(tempfile.gettempdir()) / 'last_error.txt')
+                with open(last_err_path, 'w', encoding='utf-8') as fh:
+                    fh.write(f"Time: {utc_now().isoformat()}\n")
+                    fh.write(str(e) + '\n\n')
+                    fh.write(tb)
+            except Exception:
+                pass
+            try:
+                # Attempt a rollback and close the session to ensure it's not left in a failed state
+                _safe_db_rollback_and_close()
+            except Exception:
+                try:
+                    app.logger.exception('Rollback after commit failure also failed')
+                except Exception:
+                    pass
             flash(f'Registration error: {str(e)}', 'danger')
     return render_template('register.html')
 
@@ -2492,9 +2729,9 @@ def admin_new():
             flash(f'Invalid price format: {str(e)}', 'danger')
             return render_template('admin_edit.html', product=None)
 
-        image_path = '/static/images/placeholder.png'
+        image_path = '/uploads/images/placeholder.png'
         
-        # Handle image upload
+        # Handle image upload — use a helper to handle local or S3 saves
         file = request.files.get('image_file')
         if file and file.filename and allowed_file(file.filename):
             try:
@@ -2502,9 +2739,9 @@ def admin_new():
                 # Add timestamp to avoid filename conflicts
                 import time
                 filename = f"{int(time.time())}_{filename}"
-                dest = Path(app.config['UPLOAD_FOLDER']) / filename
-                file.save(dest)
-                image_path = f'/static/images/{filename}'
+                mime = get_mime_type(file.filename)
+                saved = _save_uploaded_file(file, filename, mime_type=mime)
+                image_path = saved
             except Exception as e:
                 flash(f'Image upload failed: {str(e)}', 'warning')
 
@@ -2515,7 +2752,10 @@ def admin_new():
             flash('Product created successfully.', 'success')
             return redirect(url_for('admin_index'))
         except Exception as e:
-            db.session.rollback()
+            try:
+                _safe_db_rollback_and_close()
+            except Exception:
+                pass
             flash(f'Error creating product: {str(e)}', 'danger')
             return render_template('admin_edit.html', product=None)
     return render_template('admin_edit.html', product=None)
@@ -2585,12 +2825,13 @@ def admin_edit(pid):
                         p.product_image_mime = mime_type
                         p.image = url_for('product_image', pid=p.id)
                 else:
-                    if 'static' in app.config.get('UPLOAD_FOLDER', ''):
-                        dest = Path(app.config['UPLOAD_FOLDER']) / filename
-                        file.save(dest)
-                        p.image = f'/static/images/{filename}'
-                    else:
-                        # Serverless fallback - store in DB
+                    # Prefer local save or S3 fallback; helper returns either an S3 URL
+                    # or a path (e.g. /uploads/images/<filename>) which we can store in the DB.
+                    try:
+                        saved = _save_uploaded_file(file, filename, mime_type=mime_type)
+                        p.image = saved
+                    except Exception:
+                        # Serverless fallback - store in DB when save fails
                         b64_data = encode_image_to_base64(file)
                         p.product_image_data = b64_data
                         p.product_image_mime = mime_type
@@ -2603,7 +2844,10 @@ def admin_edit(pid):
             flash(f'Product "{p.title}" updated successfully!', 'success')
             return redirect(url_for('admin_index'))
         except Exception as e:
-            db.session.rollback()
+            try:
+                _safe_db_rollback_and_close()
+            except Exception:
+                pass
             flash(f'Error updating product: {str(e)}', 'danger')
             return render_template('admin_edit.html', product=p)
     return render_template('admin_edit.html', product=p)
@@ -2682,7 +2926,7 @@ def admin_order_update_status(oid):
                         'subtotal': float(oi.subtotal)
                     }
                     if oi.product_id:
-                        p = Product.query.get(oi.product_id)
+                        p = db.session.get(Product, oi.product_id)
                         if p:
                             item_dict['image_path'] = p.image if p.image else ''
                     items_with_images.append(item_dict)
@@ -2753,7 +2997,10 @@ def admin_order_update_status(oid):
 
         flash('Order status updated.', 'success')
     except Exception as e:
-        db.session.rollback()
+        try:
+            _safe_db_rollback_and_close()
+        except Exception:
+            pass
         flash(f'Failed to update order status: {e}', 'danger')
     return redirect(url_for('admin_order_detail', oid=oid))
 
@@ -2773,7 +3020,10 @@ def admin_delete(pid):
         db.session.commit()
         flash(f'Product "{product_title}" deleted successfully.', 'info')
     except Exception as e:
-        db.session.rollback()
+        try:
+            _safe_db_rollback_and_close()
+        except Exception:
+            pass
         flash(f'Error deleting product: {str(e)}', 'danger')
     return redirect(url_for('admin_index'))
 
@@ -2814,7 +3064,10 @@ def admin_credit_wallet(user_id):
         db.session.commit()
         flash(f'Credited GH₵{amount:.2f} to {user.email}', 'success')
     except Exception as e:
-        db.session.rollback()
+        try:
+            _safe_db_rollback_and_close()
+        except Exception:
+            pass
         flash(f'Error crediting wallet: {str(e)}', 'danger')
     
     return redirect(url_for('admin_wallets'))
@@ -2843,7 +3096,10 @@ def admin_debit_wallet(user_id):
         db.session.commit()
         flash(f'Debited GH₵{amount:.2f} from {user.email}', 'success')
     except Exception as e:
-        db.session.rollback()
+        try:
+            _safe_db_rollback_and_close()
+        except Exception:
+            pass
         flash(f'Error debiting wallet: {str(e)}', 'danger')
     
     return redirect(url_for('admin_wallets'))
@@ -2886,44 +3142,60 @@ def admin_settings():
             if file and file.filename and allowed_file(file.filename):
                 try:
                     mime_type = get_mime_type(file.filename)
-                    # Try S3 first
-                    if is_s3_configured():
-                        key = f"logo_{int(time.time())}_{secure_filename(file.filename)}"
-                        url = upload_to_s3(file, key, mime_type=mime_type)
-                        if url:
-                            # Some S3 URLs may exceed DB varchar limits. If so, fallback to storing bytes
-                            if len(url) > 300:
-                                # fallback to DB storage if URL is too long to fit
+                    # Unified save with local or S3 fallback
+                    filename = secure_filename(file.filename)
+                    filename = f"logo_{int(time.time())}_{filename}"
+                    try:
+                        saved = _save_uploaded_file(file, filename, mime_type=mime_type)
+                        if isinstance(saved, str) and saved.startswith('http'):
+                            # S3 URL returned; check DB length limits
+                            if len(saved) > 300:
                                 file.seek(0)
                                 b64_data = encode_image_to_base64(file)
                                 settings.logo_image_data = b64_data
                                 settings.logo_image_mime = mime_type
                                 settings.logo_image = f"/database/logo_from_{secure_filename(file.filename)}"
                                 try:
-                                    app.logger.warning('S3 URL too long for DB, stored logo as DB fallback len=%s', len(url))
+                                    app.logger.warning('S3 URL too long for DB; stored logo as DB fallback len=%s', len(saved))
                                 except Exception:
                                     pass
                                 flash('Logo saved to database (fallback) due to long S3 URL', 'success')
                             else:
-                                settings.logo_image = url
-                                # Clear DB-stored binary if present
+                                settings.logo_image = saved
                                 settings.logo_image_data = None
                                 settings.logo_image_mime = mime_type
                                 flash('Logo uploaded to S3 successfully!', 'success')
+                        elif isinstance(saved, str) and saved.startswith('/uploads/images'):
+                            settings.logo_image = saved
+                            settings.logo_image_data = None
+                            settings.logo_image_mime = mime_type
+                            flash('Logo saved to uploads successfully!', 'success')
                         else:
-                            # fallback to DB storage
+                            # Fallback to database storage
+                            file.seek(0)
                             b64_data = encode_image_to_base64(file)
                             settings.logo_image_data = b64_data
                             settings.logo_image_mime = mime_type
                             settings.logo_image = f"/database/logo_from_{secure_filename(file.filename)}"
                             flash('Logo saved to database (fallback) successfully!', 'success')
-                    else:
+                    except Exception:
+                        # Fallback to DB if saving/uploading failed
+                        file.seek(0)
                         b64_data = encode_image_to_base64(file)
                         settings.logo_image_data = b64_data
                         settings.logo_image_mime = mime_type
                         settings.logo_image = f"/database/logo_from_{secure_filename(file.filename)}"
-                        flash('Logo saved to database successfully!', 'success')
+                        flash('Logo saved to database (fallback) successfully!', 'success')
                 except Exception as e:
+                    try:
+                        app.logger.exception('Logo upload failed')
+                    except Exception:
+                        pass
+                    # Ensure DB session is clean after an upload failure
+                    try:
+                        _safe_db_rollback_and_close()
+                    except Exception:
+                        pass
                     flash(f'Logo upload failed: {str(e)}', 'warning')
         
         # Handle banner 1 upload (prefer S3 if configured, otherwise store as base64 in DB)
@@ -2932,39 +3204,55 @@ def admin_settings():
             if file and file.filename and allowed_file(file.filename):
                 try:
                     mime_type = get_mime_type(file.filename)
-                    if is_s3_configured():
-                        key = f"banner1_{int(time.time())}_{secure_filename(file.filename)}"
-                        url = upload_to_s3(file, key, mime_type=mime_type)
-                        if url:
-                            if len(url) > 300:
+                    filename = secure_filename(file.filename)
+                    filename = f"banner1_{int(time.time())}_{filename}"
+                    try:
+                        saved = _save_uploaded_file(file, filename, mime_type=mime_type)
+                        if isinstance(saved, str) and saved.startswith('http'):
+                            if len(saved) > 300:
                                 file.seek(0)
                                 b64_data = encode_image_to_base64(file)
                                 settings.banner1_image_data = b64_data
                                 settings.banner1_image_mime = mime_type
                                 settings.banner1_image = f"/database/banner1_from_{secure_filename(file.filename)}"
                                 try:
-                                    app.logger.warning('S3 URL too long for DB, stored banner1 as DB fallback len=%s', len(url))
+                                    app.logger.warning('S3 URL too long for DB, stored banner1 as DB fallback len=%s', len(saved))
                                 except Exception:
                                     pass
                                 flash('Banner 1 saved to database (fallback) due to long S3 URL', 'success')
                             else:
-                                settings.banner1_image = url
+                                settings.banner1_image = saved
+                                settings.banner1_image_data = None
+                                settings.banner1_image_mime = mime_type
+                                flash('Banner 1 uploaded to S3 successfully!', 'success')
+                        elif isinstance(saved, str) and saved.startswith('/uploads/images'):
+                            settings.banner1_image = saved
                             settings.banner1_image_data = None
                             settings.banner1_image_mime = mime_type
-                            flash('Banner 1 uploaded to S3 successfully!', 'success')
+                            flash('Banner 1 saved to uploads successfully!', 'success')
                         else:
+                            file.seek(0)
                             b64_data = encode_image_to_base64(file)
                             settings.banner1_image_data = b64_data
                             settings.banner1_image_mime = mime_type
                             settings.banner1_image = f"/database/banner1_from_{secure_filename(file.filename)}"
                             flash('Banner 1 saved to database (fallback) successfully!', 'success')
-                    else:
+                    except Exception:
+                        file.seek(0)
                         b64_data = encode_image_to_base64(file)
                         settings.banner1_image_data = b64_data
                         settings.banner1_image_mime = mime_type
                         settings.banner1_image = f"/database/banner1_from_{secure_filename(file.filename)}"
-                        flash('Banner 1 saved to database successfully!', 'success')
+                        flash('Banner 1 saved to database (fallback) successfully!', 'success')
                 except Exception as e:
+                    try:
+                        app.logger.exception('Banner 1 upload failed')
+                    except Exception:
+                        pass
+                    try:
+                        _safe_db_rollback_and_close()
+                    except Exception:
+                        pass
                     flash(f'Banner 1 upload failed: {str(e)}', 'warning')
         
         # Handle banner 2 upload (prefer S3 if configured, otherwise store as base64 in DB)
@@ -3006,6 +3294,14 @@ def admin_settings():
                         settings.banner2_image = f"/database/banner2_from_{secure_filename(file.filename)}"
                         flash('Banner 2 saved to database successfully!', 'success')
                 except Exception as e:
+                    try:
+                        app.logger.exception('Banner 2 upload failed')
+                    except Exception:
+                        pass
+                    try:
+                        _safe_db_rollback_and_close()
+                    except Exception:
+                        pass
                     flash(f'Banner 2 upload failed: {str(e)}', 'warning')
         
         # Handle background upload (prefer S3 if configured, otherwise store as base64 in DB)
@@ -3047,72 +3343,128 @@ def admin_settings():
                         settings.bg_image = f"/database/bg_from_{secure_filename(file.filename)}"
                         flash('Background saved to database successfully!', 'success')
                 except Exception as e:
+                    try:
+                        app.logger.exception('Background upload failed')
+                    except Exception:
+                        pass
+                    try:
+                        _safe_db_rollback_and_close()
+                    except Exception:
+                        pass
                     flash(f'Background upload failed: {str(e)}', 'warning')
         
+        # Logo size/position settings (NOT inside if block—applies always)
         try:
-            # Logo size/position settings
-            try:
-                lh = request.form.get('logo_height')
-                if lh is not None:
-                    settings.logo_height = int(lh)
-            except Exception:
-                pass
-            try:
-                lt = request.form.get('logo_top_px')
-                if lt is not None:
-                    settings.logo_top_px = int(lt)
-            except Exception:
-                pass
-            try:
-                lz = request.form.get('logo_zindex')
-                if lz is not None:
-                    settings.logo_zindex = int(lz)
-            except Exception:
-                pass
-            try:
-                # Cart alignment: checkbox value; presence means checked
-                settings.cart_on_right = bool(request.form.get('cart_on_right'))
-            except Exception:
-                pass
-            try:
-                if 'custom_css' in request.form:
-                    settings.custom_css = request.form.get('custom_css') or ''
-            except Exception:
-                pass
-            settings.updated_at = utc_now()
-            # Log settings fields that may cause DB commit errors (BLOB sizes, types)
-            try:
-                app.logger.debug(
-                    'Saving settings values: logo_image_len=%s logo_image_data_len=%s logo_image_mime=%s banner1_image_len=%s banner1_image_data_len=%s',
-                    len(settings.logo_image or ''), len(settings.logo_image_data or b''), settings.logo_image_mime,
-                    len(settings.banner1_image or ''), len(settings.banner1_image_data or b''))
-            except Exception:
-                pass
-            db.session.commit()
-            flash('Settings saved successfully!', 'success')
+            lh = request.form.get('logo_height')
+            if lh is not None:
+                settings.logo_height = int(lh)
+        except Exception:
+            pass
+        try:
+            lt = request.form.get('logo_top_px')
+            if lt is not None:
+                settings.logo_top_px = int(lt)
+        except Exception:
+            pass
+        try:
+            lz = request.form.get('logo_zindex')
+            if lz is not None:
+                settings.logo_zindex = int(lz)
+        except Exception:
+            pass
+        try:
+            # Cart alignment: checkbox value; presence means checked
+            settings.cart_on_right = bool(request.form.get('cart_on_right'))
+        except Exception:
+            pass
+        try:
+            if 'custom_css' in request.form:
+                settings.custom_css = request.form.get('custom_css') or ''
+        except Exception:
+            pass
+        settings.updated_at = utc_now()
+        # Log settings fields and session state that may cause DB commit errors (BLOB sizes, types)
+        try:
+            app.logger.debug('Session new=%s dirty=%s deleted=%s',
+                             len(db.session.new), len(db.session.dirty), len(db.session.deleted))
+        except Exception:
+            pass
+        # Flush to help pinpoint DB errors (flush executes SQL without committing)
+        try:
+            db.session.flush()
         except Exception as e:
-            db.session.rollback()
-            # Log full traceback for debugging
+            # Log traceback, rollback, persist to /tmp/last_error and re-raise
             import traceback
             tb = traceback.format_exc()
             try:
-                app.logger.exception('Error saving settings: %s\n%s', e, tb)
+                app.logger.exception('Flush failed prior to commit: %s\n%s', e, tb)
             except Exception:
                 try:
-                    print('Error saving settings:', e)
-                    print(tb)
+                    import sys
+                    sys.stderr.write(f"Flush failed prior to commit: {e}\n")
+                    sys.stderr.write(tb + "\n")
                 except Exception:
                     pass
-            # Persist last traceback for ease of debugging on serverless hosts
             try:
-                last_err_path = '/tmp/last_error.txt'
+                last_err_path = str(Path(tempfile.gettempdir()) / 'last_error.txt')
                 with open(last_err_path, 'w', encoding='utf-8') as fh:
-                    fh.write(f"Time: {utc_now().isoformat()}\n")
+                    fh.write(f'Time: {utc_now().isoformat()}\n')
                     fh.write(str(e) + '\n\n')
                     fh.write(tb)
             except Exception:
                 pass
-            flash(f'Error saving settings: {str(e)}', 'danger')
+            try:
+                _safe_db_rollback_and_close()
+            except Exception:
+                pass
+            # Return 500 with rendered admin_settings so tests can verify last_error.txt was written
+            try:
+                return render_template('admin_settings.html', settings=settings), 500
+            except Exception:
+                return ('Internal server error', 500)
+        # Log settings fields that may cause DB commit errors (BLOB sizes, types)
+        try:
+            app.logger.debug(
+                'Saving settings values: logo_image_len=%s logo_image_data_len=%s logo_image_mime=%s banner1_image_len=%s banner1_image_data_len=%s',
+                len(settings.logo_image or ''), len(settings.logo_image_data or b''), settings.logo_image_mime,
+                len(settings.banner1_image or ''), len(settings.banner1_image_data or b''))
+        except Exception:
+            pass
+        try:
+            db.session.commit()
+            flash('Settings saved successfully!', 'success')
+        except Exception as e_local:
+            try:
+                _safe_db_rollback_and_close()
+            except Exception:
+                pass
+            # Log full traceback for debugging
+            import traceback
+            tb = traceback.format_exc()
+            try:
+                app.logger.exception('Error saving settings: %s\n%s', e_local, tb)
+            except Exception:
+                try:
+                    import sys
+                    sys.stderr.write(f"Error saving settings: {e_local}\n")
+                    sys.stderr.write(tb + "\n")
+                except Exception:
+                    pass
+            # Persist last traceback for ease of debugging on serverless hosts
+            try:
+                last_err_path = str(Path(tempfile.gettempdir()) / 'last_error.txt')
+                with open(last_err_path, 'w', encoding='utf-8') as fh:
+                    fh.write(f"Time: {utc_now().isoformat()}\n")
+                    fh.write(str(e_local) + '\n\n')
+                    fh.write(tb)
+            except Exception:
+                pass
+            # Safely derive a short error message for the user without assuming `e_local` is available
+            try:
+                err_msg = str(e_local) if 'e_local' in locals() else 'An internal error occurred'
+            except Exception:
+                err_msg = 'An internal error occurred'
+            flash(f'Error saving settings: {err_msg}', 'danger')
     
     return render_template('admin_settings.html', settings=settings)
 
@@ -3212,6 +3564,20 @@ def admin_settings_api():
                 pass
 
         settings.updated_at = utc_now()
+        try:
+            db.session.flush()
+        except Exception as e:
+            import traceback
+            tb = traceback.format_exc()
+            try:
+                app.logger.exception('Flush failed in admin_settings_api: %s\n%s', e, tb)
+            except Exception:
+                pass
+            try:
+                _safe_db_rollback_and_close()
+            except Exception:
+                pass
+            return jsonify({'status': 'error', 'message': str(e)}), 500
         db.session.commit()
 
         return jsonify({
@@ -3225,7 +3591,10 @@ def admin_settings_api():
             }
         }), 200
     except Exception as e:
-        db.session.rollback()
+        try:
+            _safe_db_rollback_and_close()
+        except Exception:
+            pass
         try:
             app.logger.exception('Failed to save settings via API: %s', e)
         except Exception:
@@ -3288,7 +3657,10 @@ def admin_coupon_new():
             flash(f'Coupon "{code}" created successfully!', 'success')
             return redirect(url_for('admin_coupons'))
         except Exception as e:
-            db.session.rollback()
+            try:
+                _safe_db_rollback_and_close()
+            except Exception:
+                pass
             flash(f'Error creating coupon: {str(e)}', 'danger')
     
     return render_template('admin_coupon_edit.html', coupon=None)
@@ -3329,7 +3701,10 @@ def admin_coupon_edit(cid):
             flash('Coupon updated successfully!', 'success')
             return redirect(url_for('admin_coupons'))
         except Exception as e:
-            db.session.rollback()
+            try:
+                _safe_db_rollback_and_close()
+            except Exception:
+                pass
             flash(f'Error updating coupon: {str(e)}', 'danger')
     
     return render_template('admin_coupon_edit.html', coupon=coupon)
@@ -3351,7 +3726,10 @@ def admin_coupon_delete(cid):
         db.session.commit()
         flash(f'Coupon "{code}" deleted successfully!', 'success')
     except Exception as e:
-        db.session.rollback()
+        try:
+            _safe_db_rollback_and_close()
+        except Exception:
+            pass
         flash(f'Error deleting coupon: {str(e)}', 'danger')
     
     return redirect(url_for('admin_coupons'))
@@ -3393,7 +3771,7 @@ def admin_slider_new():
             )
             
             for pid in product_ids:
-                product = Product.query.get(int(pid))
+                product = db.session.get(Product, int(pid))
                 if product:
                     slider.products.append(product)
             
@@ -3402,7 +3780,10 @@ def admin_slider_new():
             flash(f'Slider "{name}" created successfully!', 'success')
             return redirect(url_for('admin_sliders'))
         except Exception as e:
-            db.session.rollback()
+            try:
+                _safe_db_rollback_and_close()
+            except Exception:
+                pass
             flash(f'Error creating slider: {str(e)}', 'danger')
     
     products = Product.query.all()
@@ -3428,7 +3809,7 @@ def admin_slider_edit(sid):
         try:
             slider.products.clear()
             for pid in product_ids:
-                product = Product.query.get(int(pid))
+                product = db.session.get(Product, int(pid))
                 if product:
                     slider.products.append(product)
             
@@ -3436,7 +3817,10 @@ def admin_slider_edit(sid):
             flash('Slider updated successfully!', 'success')
             return redirect(url_for('admin_sliders'))
         except Exception as e:
-            db.session.rollback()
+            try:
+                _safe_db_rollback_and_close()
+            except Exception:
+                pass
             flash(f'Error updating slider: {str(e)}', 'danger')
     
     products = Product.query.all()
@@ -3459,7 +3843,10 @@ def admin_slider_delete(sid):
         db.session.commit()
         flash(f'Slider "{name}" deleted successfully!', 'success')
     except Exception as e:
-        db.session.rollback()
+        try:
+            _safe_db_rollback_and_close()
+        except Exception:
+            pass
         flash(f'Error deleting slider: {str(e)}', 'danger')
     
     return redirect(url_for('admin_sliders'))
@@ -3468,10 +3855,47 @@ def admin_slider_delete(sid):
 @app.route('/static/images/<path:fname>')
 def static_images(fname):
     try:
-        return send_from_directory(str(UPLOAD_FOLDER), fname)
+        upload_folder = app.config.get('UPLOAD_FOLDER') or str(UPLOAD_FOLDER)
+        file_path = Path(upload_folder) / fname
+        if not file_path.exists():
+            raise FileNotFoundError(f"{file_path} not found")
+        # Read file into memory so we don't keep OS file handles open on Windows
+        with open(file_path, 'rb') as fh:
+            data = fh.read()
+        import mimetypes as _mimetypes
+        mimetype = _mimetypes.guess_type(str(file_path))[0] or 'application/octet-stream'
+        resp = app.response_class(data, mimetype=mimetype)
+        # Add Cache-Control header for public caches (1 hour) and avoid content sniffing
+        resp.headers['Cache-Control'] = 'public, max-age=3600'
+        resp.headers['X-Content-Type-Options'] = 'nosniff'
+        return resp
     except Exception as e:
         # If image not found, return 404
         app.logger.warning("Image not found: %s (%s)", fname, e)
+        abort(404)
+
+
+@app.route('/uploads/images/<path:fname>')
+def uploads_images(fname):
+    """Serve user-uploaded images from `UPLOAD_FOLDER`. This route ensures a
+    consistent public URL (`/uploads/images/*`) regardless of whether the
+    upload folder is local or `/tmp` on serverless hosts (Vercel)."""
+    try:
+        upload_folder = app.config.get('UPLOAD_FOLDER') or str(UPLOAD_FOLDER)
+        file_path = Path(upload_folder) / fname
+        if not file_path.exists():
+            raise FileNotFoundError(f"{file_path} not found")
+        # Read file into memory so file handles are released immediately (Windows-safe)
+        with open(file_path, 'rb') as fh:
+            data = fh.read()
+        import mimetypes as _mimetypes
+        mimetype = _mimetypes.guess_type(str(file_path))[0] or 'application/octet-stream'
+        resp = app.response_class(data, mimetype=mimetype)
+        resp.headers['Cache-Control'] = 'public, max-age=3600'
+        resp.headers['X-Content-Type-Options'] = 'nosniff'
+        return resp
+    except Exception as e:
+        app.logger.warning("Uploaded image not found: %s (%s)", fname, e)
         abort(404)
 
 @app.route('/image/<image_type>')
@@ -3514,11 +3938,14 @@ def serve_image(image_type):
             # If stored as string, decode it
             decoded = base64.b64decode(image_data.encode('utf-8') if isinstance(image_data, str) else image_data)
         
-        return app.response_class(
+        resp = app.response_class(
             response=decoded,
             status=200,
             mimetype=mime_type
         )
+        resp.headers['Cache-Control'] = 'public, max-age=3600'
+        resp.headers['X-Content-Type-Options'] = 'nosniff'
+        return resp
     except Exception as e:
         app.logger.warning("Error serving image %s: %s", image_type, e)
         abort(404)
@@ -3556,6 +3983,18 @@ def product_image(pid):
 def page_not_found(e):
     return render_template("404.html"), 404
 
+
+if __name__ == '__main__':
+    with app.app_context():
+        db.create_all()
+        # Start background retry thread for failed emails
+        try:
+            t = threading.Thread(target=_retry_failed_emails_loop, kwargs={'interval':60}, daemon=True)
+            t.start()
+            app.logger.info('Started failed-email retry thread')
+        except Exception:
+            print('[email retry] failed to start retry thread')
+    app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', '5000')))
 
 if __name__ == '__main__':
     with app.app_context():

@@ -1,0 +1,83 @@
+name: Postgres/pg8000 Integration Test
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ fix/admin-settings-500 ]
+
+jobs:
+  test-pg8000:
+    # Run the dockerized Postgres-based CI only when NEON_DATABASE_URL is NOT provided
+    if: ${{ secrets.NEON_DATABASE_URL == '' }}
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: cwdb
+          POSTGRES_USER: pguser
+          POSTGRES_PASSWORD: secret
+        options: >-
+          --health-cmd "pg_isready -U pguser -d cwdb"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.13'
+    - name: Setup venv
+      run: |
+        python -m venv .venv
+        . .venv/bin/activate
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt || true
+        pip install pg8000
+    - name: Wait for Postgres
+      env:
+        PGHOST: localhost
+        PGPORT: 5432
+      run: |
+        for i in {1..15}; do
+          pg_isready -U pguser -d cwdb && break || sleep 2
+        done
+    - name: Export DB URL for SQLAlchemy using pg8000
+      run: |
+        echo "DATABASE_URL=postgresql+pg8000://pguser:secret@localhost:5432/cwdb" >> $GITHUB_ENV
+        echo "FLASK_APP=app.py" >> $GITHUB_ENV
+    - name: Run DB migrations
+      env:
+        DATABASE_URL: ${{ env.DATABASE_URL }}
+        FLASK_APP: app.py
+      run: |
+        python -m flask db upgrade
+    - name: Run targeted tests
+      env:
+        DATABASE_URL: ${{ env.DATABASE_URL }}
+        FLASK_APP: app.py
+      run: |
+        pytest -q test_admin_settings_pg8000_exception.py -q || (echo 'PyTest exit code: $?' && exit 1)
+    - name: Dump /tmp/last_error.txt (if exists)
+      env:
+        DATABASE_URL: ${{ env.DATABASE_URL }}
+        FLASK_APP: app.py
+      run: |
+        if [ -f /tmp/last_error.txt ]; then
+          echo '--- /tmp/last_error.txt content ---'
+          cat /tmp/last_error.txt
+        else
+          echo '/tmp/last_error.txt not found'
+        fi
+    - name: Upload last_error artifact (if exists)
+      uses: actions/upload-artifact@v4
+      with:
+        name: last_error
+        path: /tmp/last_error.txt
+        if-no-files-found: ignore
+  # NOTE: Neon-specific job has been moved to a dedicated workflow file: neon-postgres-tests.yml
+

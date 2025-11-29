@@ -18,9 +18,13 @@ with app.app_context():
     p = Product(title='SM', short='s', price_ghc=10, old_price_ghc=15, image='/tmp', featured=False)
     db.session.add(p); db.session.commit()
     print('product to dict:', p.to_dict())
-    a = AdminUser(username='testadmin'); a.set_password('secret'); db.session.add(a); db.session.commit()
+    a = AdminUser.query.filter_by(username='testadmin_model1').first()
+    if not a:
+        a = AdminUser(username='testadmin_model1'); a.set_password('secret'); db.session.add(a); db.session.commit()
     print('login check:', a.check_password('secret'), a.check_password('wrong'))
-    c = Coupon(code='DISC10', discount_type='percent', discount_value=10)
-    db.session.add(c); db.session.commit()
+    c = Coupon.query.filter_by(code='DISC10').first()
+    if not c:
+        c = Coupon(code='DISC10', discount_type='percent', discount_value=10)
+        db.session.add(c); db.session.commit()
     ok,msg = c.is_valid(); print('coupon valid:', ok,msg); print('discount on 100:', c.calculate_discount(100))
 print('Done')

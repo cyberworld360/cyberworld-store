@@ -61,9 +61,9 @@ def main(argv=None):
     print("\n🔍 Validating configuration...")
     env_file = base_dir / ".env"
     if not env_file.exists():
-        print(f"❌ .env file not found at {env_file}")
-        return False
-    print(f"✅ .env file found")
+        print(f"⚠️  .env file not found at {env_file}. If you are running non-interactively, ensure necessary env vars are set in the environment (e.g. VERCEL_TOKEN, DATABASE_URL). Continuing...")
+    else:
+        print(f"✅ .env file found")
     
     # Step 3: Check Python and dependencies
     print("\n🐍 Checking Python environment...")
@@ -83,7 +83,13 @@ def main(argv=None):
     run_command("git status", "Check git status")
     run_command("git add -A", "Stage all changes")
     run_command('git commit -m "chore: Prepare for Vercel deployment" || true', "Commit changes")
-    run_command("git push origin main", "Push to GitHub")
+    # Push current branch to origin instead of forcing 'main'
+    # This avoids modifying main and respects feature branches/PRs.
+    try:
+        branch = subprocess.check_output(["git", "rev-parse", "--abbrev-ref", "HEAD"]).decode().strip()
+    except Exception:
+        branch = 'main'
+    run_command(f"git push origin {branch}", "Push current branch to GitHub")
     
     # Step 7: Vercel login (interactive)
     print("\n🔐 Vercel authentication...")

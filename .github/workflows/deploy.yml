@@ -22,6 +22,8 @@ jobs:
         source .venv/bin/activate
         python -m pip install --upgrade pip
         pip install -r requirements.txt
+        # Ensure pg8000 is available for migration steps
+        pip install pg8000
 
     - name: Run tests (fast subset)
       env:
@@ -42,6 +44,8 @@ jobs:
       env:
         VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || '' }}
+        DATABASE_URL: ${{ secrets.DATABASE_URL || '' }}
         PAYSTACK_SECRET_KEY: ${{ secrets.PAYSTACK_SECRET_KEY || '' }}
         PAYSTACK_PUBLIC_KEY: ${{ secrets.PAYSTACK_PUBLIC_KEY || '' }}
         MAIL_SERVER: ${{ secrets.MAIL_SERVER || '' }}
@@ -73,6 +77,9 @@ jobs:
         mapping[ADMIN_EMAIL]="$ADMIN_EMAIL"
         mapping[SENDGRID_API_KEY]="$SENDGRID_API_KEY"
         mapping[ERROR_VIEW_TOKEN]="$ERROR_VIEW_TOKEN"
+        # Prefer Neon secret when provided; otherwise, use DATABASE_URL
+        DBURL="${NEON_DATABASE_URL:-${DATABASE_URL}}"
+        mapping[DATABASE_URL]="$DBURL"
 
         for key in "${!mapping[@]}"; do
           value="${mapping[$key]}"
@@ -107,14 +114,35 @@ jobs:
         VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
 
     - name: Run DB migrations (optional)
-      if: ${{ secrets.DATABASE_URL }}
+      if: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
       env:
-        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || '' }}
+        NEON_DATABASE_URL_UNPOOLED: ${{ secrets.NEON_DATABASE_URL_UNPOOLED || '' }}
+        DATABASE_URL: ${{ secrets.DATABASE_URL || '' }}
         FLASK_APP: app.py
       run: |
         set -euo pipefail
         echo "Running alembic/Flask-Migrate upgrade..."
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-        export SQLALCHEMY_DATABASE_URI="$DATABASE_URL"
+        pip install pg8000
+        # Prefer Neon secret when present
+        # Prefer the unpooled neon URL for migrations if available, otherwise prefer the pooled neon URL, then DATABASE_URL
+        DBURL="${NEON_DATABASE_URL_UNPOOLED:-${NEON_DATABASE_URL:-${DATABASE_URL}}}"
+        # Rewrite scheme to pg8000 dialect if necessary
+        DBURL=$(echo "$DBURL" | sed -e 's|^postgres://|postgresql+pg8000://|' -e 's|^postgresql://|postgresql+pg8000://|')
+        export SQLALCHEMY_DATABASE_URI="$DBURL"
         python -m flask db upgrade
+
+    - name: Check for last_error (post-migration)
+      id: check-last-error
+      run: |
+        if [ -f /tmp/last_error.txt ]; then echo "exists=true" >> $GITHUB_OUTPUT; else echo "exists=false" >> $GITHUB_OUTPUT; fi
+
+    - name: Upload last_error artifact if present
+      if: ${{ steps.check-last-error.outputs.exists == 'true' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: last_error_deploy_migration-${{ github.event.pull_request.number || github.run_id }}
+        path: /tmp/last_error.txt
+        if-no-files-found: ignore
