@@ -51,6 +51,14 @@ jobs:
           branch_name: preview/pr-${{ github.event.number }}-${{ needs.setup.outputs.branch }}
           api_key: ${{ secrets.NEON_API_KEY }}
           expires_at: ${{ env.EXPIRES_AT }}
+      - name: Check Neon creds
+        id: check_neon_creds
+        env:
+          NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+        run: |
+          if [ -z "$NEON_PROJECT_ID" ]; then echo "NEON_PROJECT_ID is not set; aborting workflow"; exit 1; fi
+          if [ -z "$NEON_API_KEY" ]; then echo "NEON_API_KEY is not set as a repo secret; aborting workflow"; exit 1; fi
       - name: Checkout repo for migrations and tests
         uses: actions/checkout@v4
 
@@ -82,7 +90,33 @@ jobs:
             export DATABASE_URL=$(echo "$DATABASE_URL" | sed -e 's|^postgres://|postgresql+pg8000://|')
           fi
           export SQLALCHEMY_DATABASE_URI="$DATABASE_URL"
-          pytest -q
+          pytest -q --junitxml=pytest-results.xml
+
+      - name: Upload pytest results (junit)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-results-${{ github.run_id }}
+          path: pytest-results.xml
+          if-no-files-found: ignore
+
+      - name: Capture last_error and upload as artifact (if present)
+        if: always()
+        run: |
+          # copy /tmp/last_error.txt into workspace if present so artifact uploader can pick it up
+          if [ -f /tmp/last_error.txt ]; then
+            cp /tmp/last_error.txt "$GITHUB_WORKSPACE/last_error_${{ github.run_id }}.txt"
+            echo "Found last_error.txt and copied to workspace"
+          else
+            echo "No /tmp/last_error.txt found"
+          fi
+      - name: Upload last_error artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: last-error-${{ github.run_id }}
+          path: last_error_${{ github.run_id }}.txt
+          if-no-files-found: ignore
 
       - name: Post Schema Diff to PR (Neon)
         if: success() && github.event_name == 'pull_request'

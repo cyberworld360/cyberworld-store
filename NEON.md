@@ -20,6 +20,13 @@ postgresql://neondb_owner:xyz@ep-empty-frog-.../neondb?sslmode=require
 postgresql://neondb_owner:xyz@ep-empty-frog-.../neondb?sslmode=require
 ```
 
+## Neon Project and API key for PR preview workflows
+- The PR preview workflow provisions Neon preview branches and requires two additional items in the repo:
+	1. A repo **variable** called `NEON_PROJECT_ID` containing the Neon project ID (not a secret). Add it under: Settings -> Secrets & variables -> Actions -> Variables.
+	2. An **Actions secret** named `NEON_API_KEY` containing an API key with permission to create and delete preview branches. Add it under: Settings -> Secrets & variables -> Actions -> Secrets.
+
+Make sure the API key used for `NEON_API_KEY` has the permission to create preview branches and to run schema-diff operations. These values are required by the preview PR workflow to create and delete branch instances and post schema diffs back to PRs.
+
 > Note: The CI workflows will translate the URL to use `postgresql+pg8000://` for SQLAlchemy automatically when running Neon tests.
 
 ## Running Neon tests locally
@@ -41,6 +48,8 @@ python -m pytest -q test_admin_settings_pg8000_exception.py::test_admin_settings
 
 ## CI: Neon workflow
 - CI will automatically run a Neon-specific workflow called `neon-postgres-tests.yml` when `NEON_DATABASE_URL` is present in the repository secrets.
+
+- The PR preview workflow also uploads `pytest` junit results and `last_error.txt` (if present) as artifacts so maintainers can download them from the workflow run output.
 
 Note: For database migrations the workflows prefer an **unpooled** URL when available so long-running operations are not terminated by connection pooling. If you provide `NEON_DATABASE_URL_UNPOOLED`, it will be used for migrations; otherwise the pooled `NEON_DATABASE_URL` will be used.
 - If the secret is not present, the workflow `pg8000-postgres-tests.yml` will instead run a container-based Postgres (docker) job.

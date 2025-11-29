@@ -73,6 +73,15 @@ if os.environ.get("VERCEL") or os.environ.get("VERCEL_URL"):
 else:
     UPLOAD_FOLDER = BASE_DIR / "static" / "images"
 UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
+# Validate upload folder permissions and existence
+try:
+    if not UPLOAD_FOLDER.exists():
+        UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
+    test_file = UPLOAD_FOLDER / '.permcheck'
+    test_file.write_text('ok')
+    test_file.unlink()
+except Exception as e:
+    print(f"[WARNING] Failed to ensure UPLOAD_FOLDER exists or is writable: {UPLOAD_FOLDER} — {e}")
 
 # Helper function for timezone-aware UTC datetime
 def utc_now():
@@ -86,9 +95,53 @@ app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "change-me")
 _env_db = os.environ.get("SQLALCHEMY_DATABASE_URI", "").strip()
 _db_url = _env_db or os.environ.get("DATABASE_URL", "").strip()
 
+
+def _normalize_db_url_for_driver(db_url: str) -> str:
+    """Normalize DB URL for SQLAlchemy and drivers.
+
+    - Rewrite `postgres://` or `postgresql://` to `postgresql+pg8000://` when `psycopg2` is not installed
+      and `pg8000` is present.
+    - Strip SSL query parameters (`sslmode`, `sslrootcert`, etc.) so drivers that don't accept
+      those kwargs (like `pg8000`) don't choke at connect() time. The SSL config will be passed
+      via SQLAlchemy `SQLALCHEMY_ENGINE_OPTIONS` separately in `_safe_initialize_extensions`.
+    """
+    try:
+        import importlib.util
+        if not db_url:
+            return db_url
+        is_postgres = db_url.startswith("postgres://") or db_url.startswith("postgresql://")
+        if not is_postgres:
+            return db_url
+        have_psycopg2 = importlib.util.find_spec("psycopg2") is not None or importlib.util.find_spec("psycopg2_binary") is not None
+        have_pg8000 = importlib.util.find_spec("pg8000") is not None
+        if not have_psycopg2 and have_pg8000:
+            # Rewrite scheme to use pg8000
+            if db_url.startswith("postgres://"):
+                db_url = "postgresql+pg8000://" + db_url[len("postgres://"):]
+            elif db_url.startswith("postgresql://"):
+                db_url = "postgresql+pg8000://" + db_url[len("postgresql://"):]
+        # Strip SSL related query params from the URL string; the SSL context will be added later.
+        try:
+            parsed_any = urllib.parse.urlsplit(db_url)
+            qs_any = urllib.parse.parse_qs(parsed_any.query, keep_blank_values=True)
+            ssl_keys = [k for k in list(qs_any.keys()) if k.lower().startswith('ssl')]
+            if ssl_keys:
+                for k in ssl_keys:
+                    qs_any.pop(k, None)
+                clean_q_any = urllib.parse.urlencode({k: v[0] for k, v in qs_any.items()})
+                db_url = urllib.parse.urlunsplit((parsed_any.scheme, parsed_any.netloc, parsed_any.path, clean_q_any, parsed_any.fragment))
+        except Exception:
+            pass
+        return db_url
+    except Exception:
+        return db_url
+
 if _db_url:
     # Use explicit database URL from environment
-    app.config["SQLALCHEMY_DATABASE_URI"] = _db_url
+    try:
+        app.config["SQLALCHEMY_DATABASE_URI"] = _normalize_db_url_for_driver(_db_url)
+    except Exception:
+        app.config["SQLALCHEMY_DATABASE_URI"] = _db_url
 elif os.environ.get("VERCEL") or os.environ.get("VERCEL_URL"):
     # Running on Vercel in production without a persistent DATABASE_URL
     # is dangerous: /tmp is ephemeral and data will be lost between deployments.
@@ -318,6 +371,17 @@ def init_db_on_first_request():
                 db.create_all()
             # Ensure Settings table has all expected columns
             _ensure_settings_columns()
+            # Quick connectivity check — attempt a simple query using the engine
+            try:
+                from sqlalchemy import text
+                with db.engine.connect() as conn:
+                    conn.execute(text("SELECT 1"))
+                app.logger.info('Database connectivity check: OK')
+            except Exception as dc_exc:
+                try:
+                    app.logger.warning('Database connectivity check failed: %s', dc_exc)
+                except Exception:
+                    print(f"[db check] connectivity failed: {dc_exc}")
             # Ensure default admin user exists
             if not AdminUser.query.filter_by(username="Cyberjnr").first():
                 try:
@@ -869,6 +933,53 @@ def _safe_db_rollback_and_close():
 def is_s3_configured():
     """Return True if AWS S3 env vars are present to enable S3 uploads."""
     return bool(os.environ.get('AWS_S3_BUCKET') and os.environ.get('AWS_ACCESS_KEY_ID') and os.environ.get('AWS_SECRET_ACCESS_KEY'))
+
+
+def _is_upload_folder_writable() -> bool:
+    """Return True if app upload folder is writable. Attempts a small write to ensure permissions."""
+    try:
+        folder = Path(app.config.get('UPLOAD_FOLDER', ''))
+        if not folder.exists():
+            folder.mkdir(parents=True, exist_ok=True)
+        test_path = folder / ('.permcheck_upload_' + str(int(time.time())))
+        test_path.write_text('ok')
+        test_path.unlink()
+        return True
+    except Exception:
+        return False
+
+
+def _save_uploaded_file(file_obj, filename, mime_type=None) -> str:
+    """Save an uploaded file to local `UPLOAD_FOLDER` or, if not writable and S3 configured,
+    fallback to S3 and return the public URL/path for the saved file. Returns the chosen
+    path (local /uploads/images/<filename> or S3 URL). Raises on fatal errors when neither
+    option is available.
+    """
+    folder = Path(app.config.get('UPLOAD_FOLDER', ''))
+    local_path = folder / filename
+    # Ensure bucket path for S3
+    s3_key = f"uploads/images/{filename}"
+    # First try local write if possible
+    if _is_upload_folder_writable():
+        try:
+            file_obj.seek(0)
+            # werkzeug FileStorage has save
+            file_obj.save(local_path)
+            return f"/uploads/images/{filename}"
+        except Exception:
+            # fallthrough to S3
+            pass
+    # If local save failed or not writable, try S3
+    if is_s3_configured():
+        try:
+            file_obj.seek(0)
+            url = upload_to_s3(file_obj, s3_key, mime_type=mime_type)
+            if url:
+                return url
+        except Exception:
+            pass
+    # If we've reached here, nothing worked
+    raise IOError('Failed to save uploaded file locally or to S3')
 
 
 def upload_to_s3(file_obj, key, mime_type=None):
@@ -2595,9 +2706,9 @@ def admin_new():
             flash(f'Invalid price format: {str(e)}', 'danger')
             return render_template('admin_edit.html', product=None)
 
-        image_path = '/static/images/placeholder.png'
+        image_path = '/uploads/images/placeholder.png'
         
-        # Handle image upload
+        # Handle image upload — use a helper to handle local or S3 saves
         file = request.files.get('image_file')
         if file and file.filename and allowed_file(file.filename):
             try:
@@ -2605,9 +2716,9 @@ def admin_new():
                 # Add timestamp to avoid filename conflicts
                 import time
                 filename = f"{int(time.time())}_{filename}"
-                dest = Path(app.config['UPLOAD_FOLDER']) / filename
-                file.save(dest)
-                image_path = f'/static/images/{filename}'
+                mime = get_mime_type(file.filename)
+                saved = _save_uploaded_file(file, filename, mime_type=mime)
+                image_path = saved
             except Exception as e:
                 flash(f'Image upload failed: {str(e)}', 'warning')
 
@@ -2691,12 +2802,13 @@ def admin_edit(pid):
                         p.product_image_mime = mime_type
                         p.image = url_for('product_image', pid=p.id)
                 else:
-                    if 'static' in app.config.get('UPLOAD_FOLDER', ''):
-                        dest = Path(app.config['UPLOAD_FOLDER']) / filename
-                        file.save(dest)
-                        p.image = f'/static/images/{filename}'
-                    else:
-                        # Serverless fallback - store in DB
+                    # Prefer local save or S3 fallback; helper returns either an S3 URL
+                    # or a path (e.g. /uploads/images/<filename>) which we can store in the DB.
+                    try:
+                        saved = _save_uploaded_file(file, filename, mime_type=mime_type)
+                        p.image = saved
+                    except Exception:
+                        # Serverless fallback - store in DB when save fails
                         b64_data = encode_image_to_base64(file)
                         p.product_image_data = b64_data
                         p.product_image_mime = mime_type
@@ -3701,10 +3813,29 @@ def admin_slider_delete(sid):
 @app.route('/static/images/<path:fname>')
 def static_images(fname):
     try:
-        return send_from_directory(str(UPLOAD_FOLDER), fname)
+        resp = send_from_directory(str(UPLOAD_FOLDER), fname)
+        # Add Cache-Control header for public caches (1 hour) and avoid content sniffing
+        resp.headers['Cache-Control'] = 'public, max-age=3600'
+        resp.headers['X-Content-Type-Options'] = 'nosniff'
+        return resp
     except Exception as e:
         # If image not found, return 404
         app.logger.warning("Image not found: %s (%s)", fname, e)
+        abort(404)
+
+
+@app.route('/uploads/images/<path:fname>')
+def uploads_images(fname):
+    """Serve user-uploaded images from `UPLOAD_FOLDER`. This route ensures a
+    consistent public URL (`/uploads/images/*`) regardless of whether the
+    upload folder is local or `/tmp` on serverless hosts (Vercel)."""
+    try:
+        resp = send_from_directory(str(UPLOAD_FOLDER), fname)
+        resp.headers['Cache-Control'] = 'public, max-age=3600'
+        resp.headers['X-Content-Type-Options'] = 'nosniff'
+        return resp
+    except Exception as e:
+        app.logger.warning("Uploaded image not found: %s (%s)", fname, e)
         abort(404)
 
 @app.route('/image/<image_type>')
@@ -3747,11 +3878,14 @@ def serve_image(image_type):
             # If stored as string, decode it
             decoded = base64.b64decode(image_data.encode('utf-8') if isinstance(image_data, str) else image_data)
         
-        return app.response_class(
+        resp = app.response_class(
             response=decoded,
             status=200,
             mimetype=mime_type
         )
+        resp.headers['Cache-Control'] = 'public, max-age=3600'
+        resp.headers['X-Content-Type-Options'] = 'nosniff'
+        return resp
     except Exception as e:
         app.logger.warning("Error serving image %s: %s", image_type, e)
         abort(404)
@@ -3789,6 +3923,18 @@ def product_image(pid):
 def page_not_found(e):
     return render_template("404.html"), 404
 
+
+if __name__ == '__main__':
+    with app.app_context():
+        db.create_all()
+        # Start background retry thread for failed emails
+        try:
+            t = threading.Thread(target=_retry_failed_emails_loop, kwargs={'interval':60}, daemon=True)
+            t.start()
+            app.logger.info('Started failed-email retry thread')
+        except Exception:
+            print('[email retry] failed to start retry thread')
+    app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', '5000')))
 
 if __name__ == '__main__':
     with app.app_context():
