@@ -1700,6 +1700,7 @@ def paystack_init():
 
     initialize_url = "https://api.paystack.co/transaction/initialize"
     headers = {"Authorization": f"Bearer {PAYSTACK_SECRET}", "Content-Type": "application/json"}
+    callback_url = PAYSTACK_CALLBACK or url_for('paystack_callback', _external=True)
     reference = str(uuid.uuid4())
     payload = {
         "email": email,
