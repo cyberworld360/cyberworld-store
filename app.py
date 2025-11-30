@@ -318,6 +318,20 @@ def _safe_initialize_extensions(application):
                     application.logger.info('Provided ssl_context via SQLALCHEMY_ENGINE_OPTIONS for DB driver')
                 except Exception:
                     application.logger.warning('Failed to create ssl_context; continuing without it')
+        # Ensure pg8000 always receives an ssl_context unless explicitly configured otherwise
+        try:
+            if 'pg8000' in application.config.get('SQLALCHEMY_DATABASE_URI', ''):
+                application.config.setdefault('SQLALCHEMY_ENGINE_OPTIONS', {})
+                application.config['SQLALCHEMY_ENGINE_OPTIONS'].setdefault('connect_args', {})
+                if 'ssl_context' not in application.config['SQLALCHEMY_ENGINE_OPTIONS']['connect_args']:
+                    try:
+                        ctx_default = ssl.create_default_context()
+                        application.config['SQLALCHEMY_ENGINE_OPTIONS']['connect_args']['ssl_context'] = ctx_default
+                        application.logger.info('Set default ssl_context for pg8000 driver')
+                    except Exception:
+                        application.logger.warning('Failed to create default ssl_context for pg8000')
+        except Exception:
+            pass
         except Exception:
             try:
                 application.logger.debug('ssl cleanup encountered an error; continuing')
