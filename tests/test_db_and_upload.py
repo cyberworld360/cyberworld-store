@@ -13,8 +13,8 @@ spec.loader.exec_module(mod)
 def test_normalize_db_url_strips_sslmode_and_rewrites_pg8000_if_needed():
     url = 'postgres://user:pass@host:5432/dbname?sslmode=require&other=1'
     normalized = mod._normalize_db_url_for_driver(url)
-    # Should not include sslmode
-    assert 'sslmode' not in normalized
+    # Should include sslmode=require after normalization to ensure secure default
+    assert 'sslmode=require' in normalized
     # If function rewrites to pg8000 it will include 'pg8000'
     # Accept either rewrite or same value without sslmode
     assert normalized.startswith('postgresql') or normalized.startswith('postgres://')

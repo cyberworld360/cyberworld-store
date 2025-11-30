@@ -120,16 +120,20 @@ def _normalize_db_url_for_driver(db_url: str) -> str:
                 db_url = "postgresql+pg8000://" + db_url[len("postgres://"):]
             elif db_url.startswith("postgresql://"):
                 db_url = "postgresql+pg8000://" + db_url[len("postgresql://"):]
-        # Strip SSL related query params from the URL string; the SSL context will be added later.
+        # Ensure SSL mode is set for Postgres connections; prefer to keep `sslmode` but drop other `ssl*` params
         try:
             parsed_any = urllib.parse.urlsplit(db_url)
             qs_any = urllib.parse.parse_qs(parsed_any.query, keep_blank_values=True)
-            ssl_keys = [k for k in list(qs_any.keys()) if k.lower().startswith('ssl')]
-            if ssl_keys:
-                for k in ssl_keys:
-                    qs_any.pop(k, None)
-                clean_q_any = urllib.parse.urlencode({k: v[0] for k, v in qs_any.items()})
-                db_url = urllib.parse.urlunsplit((parsed_any.scheme, parsed_any.netloc, parsed_any.path, clean_q_any, parsed_any.fragment))
+            # ensure sslmode=require is present for servers that enforce SSL
+            existing_keys = {k.lower() for k in qs_any.keys()}
+            if 'sslmode' not in existing_keys:
+                qs_any['sslmode'] = ['require']
+            # Remove any other ssl* parameters while keeping sslmode
+            other_ssl_keys = [k for k in list(qs_any.keys()) if k.lower().startswith('ssl') and k.lower() != 'sslmode']
+            for k in other_ssl_keys:
+                qs_any.pop(k, None)
+            clean_q_any = urllib.parse.urlencode({k: v[0] for k, v in qs_any.items()})
+            db_url = urllib.parse.urlunsplit((parsed_any.scheme, parsed_any.netloc, parsed_any.path, clean_q_any, parsed_any.fragment))
         except Exception:
             pass
         return db_url
@@ -318,6 +322,11 @@ def _safe_initialize_extensions(application):
                     application.logger.info('Provided ssl_context via SQLALCHEMY_ENGINE_OPTIONS for DB driver')
                 except Exception:
                     application.logger.warning('Failed to create ssl_context; continuing without it')
+        except Exception:
+            try:
+                application.logger.debug('ssl cleanup encountered an error; continuing')
+            except Exception:
+                pass
         # Ensure pg8000 always receives an ssl_context unless explicitly configured otherwise
         try:
             if 'pg8000' in application.config.get('SQLALCHEMY_DATABASE_URI', ''):
@@ -327,11 +336,11 @@ def _safe_initialize_extensions(application):
                     try:
                         ctx_default = ssl.create_default_context()
                         application.config['SQLALCHEMY_ENGINE_OPTIONS']['connect_args']['ssl_context'] = ctx_default
+                        # Also provide explicit ssl=True/required flag to pg8000 connect args
+                        application.config['SQLALCHEMY_ENGINE_OPTIONS']['connect_args']['ssl'] = True
                         application.logger.info('Set default ssl_context for pg8000 driver')
                     except Exception:
                         application.logger.warning('Failed to create default ssl_context for pg8000')
-        except Exception:
-            pass
         except Exception:
             try:
                 application.logger.debug('ssl cleanup encountered an error; continuing')
