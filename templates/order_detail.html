@@ -1,0 +1,75 @@
+{% extends 'base.html' %}
+{% block content %}
+<style>
+.invoice { max-width: 800px; margin: 20px auto; padding: 20px; background: white; border: 1px solid #e0e0e0; }
+.invoice h2 { margin-top: 0 }
+.invoice .meta { display:flex; justify-content:space-between }
+.table-inv { width:100%; border-collapse:collapse; margin-top:15px }
+.table-inv th, .table-inv td { border:1px solid #ddd; padding:8px }
+.print-btn { margin-bottom:10px }
+@media print { .print-btn{ display:none } }
+</style>
+<div class="invoice">
+  <button class="btn btn-primary print-btn" onclick="window.print()">Print</button>
+  <div style="display:flex; align-items:center; gap:20px; margin-bottom:12px">
+    <img src="{{ settings.logo_image }}" alt="logo" style="height:60px;"/>
+    <h2 style="margin:0">Order — {{ order.reference }}</h2>
+  </div>
+  <div class="meta">
+    <div>
+      <strong>To:</strong><br>
+      {{ order.name or order.email }}<br>
+      {{ order.email }}<br>
+      {{ order.phone }}
+    </div>
+    <div>
+      <strong>Order Date:</strong><br>
+      {{ order.created_at }}<br>
+      <strong>Status:</strong> {{ order.status }}
+    </div>
+  </div>
+
+  <table class="table-inv">
+    <thead><tr><th>Item</th><th>Qty</th><th>Unit</th><th>Subtotal</th></tr></thead>
+    <tbody>
+      {% for it in items %}
+      <tr>
+        <td style="display:flex; gap:10px; align-items:flex-start">
+          {% if it.product and it.product.image %}
+            <img src="{{ it.product.image }}" alt="thumb" style="width:56px;height:56px;object-fit:cover;border:1px solid #eee;padding:2px;border-radius:4px" />
+          {% endif %}
+          <div style="flex:1">
+            {% if it.product_id %}
+              <a href="{{ url_for('product_detail', pid=it.product_id) }}" style="color:#007bff;text-decoration:none;font-weight:bold">{{ it.title }}</a>
+            {% else %}
+              <strong>{{ it.title }}</strong>
+            {% endif %}
+          </div>
+        </td>
+        <td>{{ it.qty }}</td>
+        <td>{{ it.price|money }}</td>
+        <td>{{ it.subtotal|money }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr>
+        <td colspan="3" style="text-align:right"><strong>Subtotal</strong></td>
+        <td>{{ order.subtotal|money }}</td>
+      </tr>
+      <tr>
+        <td colspan="3" style="text-align:right"><strong>Shipping</strong></td>
+        <td>{{ (order.total - order.subtotal + order.discount)|money if order.total and order.subtotal is not none else 'GH₵0.00' }}</td>
+      </tr>
+      <tr>
+        <td colspan="3" style="text-align:right"><strong>Discount</strong></td>
+        <td>-{{ order.discount|money }}</td>
+      </tr>
+      <tr>
+        <td colspan="3" style="text-align:right"><strong>Total</strong></td>
+        <td>{{ order.total|money }}</td>
+      </tr>
+    </tfoot>
+  </table>
+</div>
+{% endblock %}

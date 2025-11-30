@@ -2657,6 +2657,34 @@ def user_logout():
     flash('Logged out.', 'info')
     return redirect(url_for('index'))
 
+
+@app.route('/account')
+@login_required
+def user_account():
+    """Customer account dashboard showing user's orders and wallet info."""
+    # Redirect admin users to admin index
+    if getattr(current_user, 'is_admin', False):
+        return redirect(url_for('admin_index'))
+    try:
+        orders = Order.query.filter_by(user_id=current_user.id).order_by(Order.created_at.desc()).all()
+    except Exception:
+        orders = []
+    return render_template('account.html', orders=orders)
+
+
+@app.route('/account/order/<int:oid>')
+@login_required
+def user_order_detail(oid):
+    """Detailed view of a user's order. Only the owner may view their order."""
+    from flask import abort
+    order = Order.query.get_or_404(oid)
+    # Allow owner or admin to view, or match by email for legacy orders
+    if not getattr(current_user, 'is_admin', False):
+        if order.user_id != getattr(current_user, 'id', None) and (order.email or '').lower() != (getattr(current_user, 'email', '') or '').lower():
+            abort(403)
+    items = OrderItem.query.filter_by(order_id=order.id).all()
+    return render_template('order_detail.html', order=order, items=items)
+
 @app.route('/admin')
 @login_required
 @admin_required

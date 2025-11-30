@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1>My Account</h1>
+<p>Welcome back, {{ current_user.email }}.</p>
+<h2>Your Orders</h2>
+<table class="table table-striped">
+  <thead>
+    <tr>
+      <th>Ref</th>
+      <th>Total</th>
+      <th>Paid</th>
+      <th>Status</th>
+      <th>Created</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for o in orders %}
+    <tr>
+      <td>{{ o.reference[:8] }}</td>
+      <td>{{ o.total|money }}</td>
+      <td>{{ 'Yes' if o.paid else 'No' }}</td>
+      <td>{{ o.status }}</td>
+      <td>{{ o.created_at }}</td>
+      <td><a href="{{ url_for('user_order_detail', oid=o.id) }}" class="btn btn-sm btn-info">View</a></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6">You have not placed any orders yet.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
+
