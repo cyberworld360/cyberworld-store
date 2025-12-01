@@ -1,0 +1,26 @@
+Registering user smoke+fa23207b@example.com
+register status 200
+Logging in as user
+login status 200
+Fetching product list
+Selected product id 12
+add to cart status 200
+Logging in as admin (for wallet credit)
+admin login status 200
+found wallet ids in admin page: ['1', '2', '3', '4', '5']
+Determined user_id: 5
+credit wallet status 200
+Attempting wallet checkout
+/checkout GET 200
+wallet payment POST status 405
+final URL https://cyberworld-store-jikmapnqz-cyberworldstores-projects.vercel.app/pay/paystack
+/account status 200
+/account snippet <!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CyberWorld Store</title>
+    <link rel="sty
+No order link found in account page; check cart/checkout result
+Smoke test completed
