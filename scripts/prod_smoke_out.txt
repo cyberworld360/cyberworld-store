@@ -1,4 +1,4 @@
-Registering user smoke+fa23207b@example.com
+Registering user smoke+38ab7199@example.com
 register status 200
 Logging in as user
 login status 200
@@ -8,7 +8,7 @@ add to cart status 200
 Logging in as admin (for wallet credit)
 admin login status 200
 found wallet ids in admin page: ['1', '2', '3', '4', '5']
-Determined user_id: 5
+Determined user_id: 6
 credit wallet status 200
 Attempting wallet checkout
 /checkout GET 200

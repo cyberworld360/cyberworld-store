@@ -30,9 +30,11 @@
       <div class="container header-grid">
         {% if settings.cart_on_right %}
         <div class="header-left">
-          <button id="mobile-menu-toggle" class="mobile-menu-toggle" aria-label="Toggle menu">☰</button>
+          <button id="mobile-menu-toggle-left" class="mobile-menu-toggle mobile-menu-toggle-left" aria-label="Toggle menu" aria-expanded="false">☰</button>
           <nav class="main-nav">
             <div class="nav-panel" aria-hidden="true">
+            <a href="/cart" class="cart-link">🛒 Cart</a>
+            <a href="/cart" class="cart-link" aria-label="Cart">🛒<span class="cart-count" aria-live="polite" aria-atomic="true"></span></a>
             {% if current_user.is_authenticated %}
               {% if current_user.username is defined %}
                 <!-- Admin links - grouped under hamburger menu -->
@@ -47,10 +49,9 @@
                 <span class="panel-user">{{ current_user.email }}</span>
                 <a href="/account">My Account</a>
                 <a href="/logout">Logout</a>
-                <a href="/register">Register</a>
-                <a href="/login">Customer Login</a>
               {% endif %}
             {% else %}
+              <a href="/cart" class="cart-link">🛒 Cart</a>
               <a href="/admin/login">Admin</a>
               <a href="/register">Register</a>
               <a href="/login">Customer Login</a>
@@ -65,8 +66,8 @@
         </div>
         {% endif %}
         <div class="brand center-logo" style="top: calc({{ settings.logo_top_px or 8 }}px); z-index: {{ settings.logo_zindex or 9999 }};">
-          <a href="/" class="logo-link">
-            <img src="{{ settings.get_logo_url() }}" alt="CyberWorld" class="logo-img" style="height: {{ settings.logo_height or 48 }}px;" />
+          <a href="/" aria-label="Home">
+            <img class="logo-img" src="{{ settings.get_logo_url() }}" alt="{{ settings.site_name or 'CyberWorld Store' }}" />
           </a>
         </div>
         {% if settings.cart_on_right %}
@@ -75,7 +76,7 @@
         </div>
         {% else %}
         <div class="header-right">
-          <button id="mobile-menu-toggle" class="mobile-menu-toggle" aria-label="Toggle menu">☰</button>
+          <button id="mobile-menu-toggle-right" class="mobile-menu-toggle mobile-menu-toggle-right" aria-label="Toggle menu" aria-expanded="false">☰</button>
           <nav class="main-nav">
             <div class="nav-panel" aria-hidden="true">
             {% if current_user.is_authenticated %}
@@ -92,8 +93,6 @@
                 <span class="panel-user">{{ current_user.email }}</span>
                 <a href="/account">My Account</a>
                 <a href="/logout">Logout</a>
-                <a href="/register">Register</a>
-                <a href="/login">Customer Login</a>
               {% endif %}
             {% else %}
               <a href="/admin/login">Admin</a>
@@ -103,6 +102,18 @@
           </div>
             </div>
           </nav>
+          <div class="header-inline-links">
+            {% if not settings.cart_on_right %}
+              <a href="/cart" class="cart-link" aria-label="Cart">🛒<span class="cart-count" aria-live="polite" aria-atomic="true"></span></a>
+            {% endif %}
+            {% if current_user.is_authenticated %}
+              <a href="/account">My Account</a>
+              <a href="/logout">Logout</a>
+            {% else %}
+              <a href="/register">Register</a>
+              <a href="/login">Login</a>
+            {% endif %}
+          </div>
         </div>
         {% endif %}
       </div>
@@ -110,7 +121,7 @@
     <main class="container">
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
-          <div class="flash-list">
+          <div class="flash-list" role="status" aria-live="polite">
             {% for category, msg in messages %}
               <div class="flash {{ category }}">{{ msg }}</div>
             {% endfor %}
@@ -131,19 +142,33 @@
     <script>
       // Mobile nav toggle
       document.addEventListener('DOMContentLoaded', function(){
-        const toggle = document.getElementById('mobile-menu-toggle');
-          const nav = document.querySelector('.main-nav');
-          const panel = nav ? nav.querySelector('.nav-panel') : null;
-          if (toggle && nav) {
-            toggle.addEventListener('click', () => {
-              nav.classList.toggle('open');
-              if (panel) {
-                const isOpen = nav.classList.contains('open');
-                panel.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
-              }
-            });
-          }
-      })
+        // Toggle all mobile menu buttons; each toggles the nearest .main-nav
+        const toggles = document.querySelectorAll('.mobile-menu-toggle');
+        toggles.forEach(toggle => {
+          const nav = toggle.closest('.header-left, .header-right')?.querySelector('.main-nav') || document.querySelector('.main-nav');
+          if (!nav) return;
+          const panel = nav.querySelector('.nav-panel');
+          toggle.addEventListener('click', () => {
+            nav.classList.toggle('open');
+            const isOpen = nav.classList.contains('open');
+            // actually update aria-hidden on panel and aria-expanded on the toggle
+            if (panel) panel.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+            toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+          });
+        });
+        // Close open nav when clicking outside
+        document.addEventListener('click', (e) => {
+          const openNavs = document.querySelectorAll('.main-nav.open');
+          openNavs.forEach(nav => {
+            if (nav.contains(e.target) || e.target.closest('.mobile-menu-toggle')) return;
+            nav.classList.remove('open');
+            const panel = nav.querySelector('.nav-panel');
+            if (panel) panel.setAttribute('aria-hidden', 'true');
+            const toggles = document.querySelectorAll('.mobile-menu-toggle');
+            toggles.forEach(t => t.setAttribute('aria-expanded', 'false'));
+          });
+        });
+      });
 
       // Simple autoslider for ads (rotates images)
       document.addEventListener('DOMContentLoaded', function(){

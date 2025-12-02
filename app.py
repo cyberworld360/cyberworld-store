@@ -1866,8 +1866,12 @@ def paystack_init_url():
     except Exception as e:
         return jsonify({'status': 'error', 'message': f'Paystack initialization error: {e}'}), 500
 
-@app.route("/pay/wallet", methods=["POST"])
+@app.route("/pay/wallet", methods=["GET", "POST"])
 def wallet_payment():
+    # Allow a GET request to redirect back to checkout (helpful for clients that mistakenly GET)
+    if request.method == 'GET':
+        return redirect(url_for('checkout'))
+    app.logger.info("wallet_payment called method=%s path=%s uid=%s", request.method, request.path, getattr(current_user, 'id', None))
     """Pay with wallet balance"""
     if not current_user.is_authenticated or not hasattr(current_user, 'email'):
         flash("Please login first.", "warning")
@@ -1899,6 +1903,7 @@ def wallet_payment():
     city = request.form.get("city", "").strip()
     coupon_id = request.form.get("coupon_id", "").strip()
     email = request.form.get("email") or current_user.email
+    app.logger.debug("wallet_payment form: name=%s phone=%s city=%s email=%s coupon_id=%s", name, phone, city, email, coupon_id)
     
     # Calculate discount if coupon applied (validate coupon properly)
     discount = Decimal('0')
@@ -1926,10 +1931,9 @@ def wallet_payment():
     
     # Check if wallet has enough after discount
     if wallet_balance < final_total:
-        # Not enough wallet balance - redirect to Paystack as fallback
-        flash(f"Wallet balance (GH₵{wallet_balance:.2f}) insufficient for discounted total (GH₵{final_total:.2f}). Redirecting to Paystack...", "info")
-        # Redirect to Paystack payment with coupon_id preserved
-        return redirect(url_for("paystack_init"))
+        # Not enough wallet balance - redirect back to checkout to choose Paystack or other method (avoid 405 by redirecting to a POST-only route)
+        flash(f"Wallet balance (GH₵{wallet_balance:.2f}) insufficient for discounted total (GH₵{final_total:.2f}). Please choose a different payment method.", "info")
+        return redirect(url_for("checkout"))
     
     # Wallet balance is sufficient - proceed with payment
     try:

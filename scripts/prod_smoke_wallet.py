@@ -7,7 +7,10 @@ import sys
 import time
 import re
 
-BASE = 'https://cyberworld-store-jikmapnqz-cyberworldstores-projects.vercel.app'
+import os
+
+# Allow overriding base URL by environment variable for automated runs
+BASE = os.environ.get('PROD_BASE') or 'https://cyberworld-store-jikmapnqz-cyberworldstores-projects.vercel.app'
 # Admin credentials (default in repo): change if production overrides
 ADMIN_USER = 'Cyberjnr'
 ADMIN_PASS = 'GITG360$'

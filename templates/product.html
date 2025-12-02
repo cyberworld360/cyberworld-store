@@ -1,12 +1,12 @@
 {% extends 'base.html' %}
 {% block content %}
 <div class="product-detail">
-  <img src="{{ product.image or '/static/images/placeholder.png' }}" alt="{{ product.title }}" />
+  <img src="{{ product.image or '/static/images/placeholder.png' }}" alt="{{ product.title }}" loading="lazy" />
   <div class="meta">
     <h2>{{ product.title }}</h2>
     <p>{{ product.short }}</p>
     <p class="price">{{ product.price_ghc|money }}</p>
-    <form action="/cart/add/{{ product.id }}" method="post">
+    <form action="/cart/add/{{ product.id }}" method="post" aria-label="Add {{ product.title }} to cart">
       <label>Qty <input type="number" name="qty" value="1" min="1" /></label>
       <button class="btn" type="submit">Add to cart</button>
     </form>

@@ -3,6 +3,7 @@
 <h1>My Account</h1>
 <p>Welcome back, {{ current_user.email }}.</p>
 <h2>Your Orders</h2>
+<div class="table-responsive">
 <table class="table table-striped">
   <thead>
     <tr>
@@ -22,12 +23,13 @@
       <td>{{ 'Yes' if o.paid else 'No' }}</td>
       <td>{{ o.status }}</td>
       <td>{{ o.created_at }}</td>
-      <td><a href="{{ url_for('user_order_detail', oid=o.id) }}" class="btn btn-sm btn-info">View</a></td>
+      <td><a href="{{ url_for('user_order_detail', oid=o.id) }}" class="btn btn-sm btn-info btn-inline">View</a></td>
     </tr>
     {% else %}
     <tr><td colspan="6">You have not placed any orders yet.</td></tr>
     {% endfor %}
   </tbody>
 </table>
+</div>
 {% endblock %}
 

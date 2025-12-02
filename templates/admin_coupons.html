@@ -71,9 +71,9 @@
                     {% endif %}
                 </td>
                 <td>
-                    <a href="/admin/coupon/edit/{{ coupon.id }}" class="btn-edit">Edit</a>
+                    <a href="/admin/coupon/edit/{{ coupon.id }}" class="btn-edit btn-sm btn-inline">Edit</a>
                     <form action="/admin/coupon/delete/{{ coupon.id }}" method="post" style="display:inline;" onsubmit="return confirm('Delete this coupon?');">
-                        <button class="btn-delete" type="submit">Delete</button>
+                        <button class="btn-delete btn-sm btn-inline" type="submit">Delete</button>
                     </form>
                 </td>
             </tr>
