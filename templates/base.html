@@ -28,13 +28,11 @@
   <body>
     <header class="site-header">
       <div class="container header-grid">
-        {% if settings.cart_on_right %}
+        <!-- Header Left: Hamburger menu and nav panel -->
         <div class="header-left">
           <button id="mobile-menu-toggle-left" class="mobile-menu-toggle mobile-menu-toggle-left" aria-label="Toggle menu" aria-expanded="false">☰</button>
           <nav class="main-nav">
             <div class="nav-panel" aria-hidden="true">
-            <a href="/cart" class="cart-link">🛒 Cart</a>
-            <a href="/cart" class="cart-link" aria-label="Cart">🛒<span class="cart-count" aria-live="polite" aria-atomic="true"></span></a>
             {% if current_user.is_authenticated %}
               {% if current_user.username is defined %}
                 <!-- Admin links - grouped under hamburger menu -->
@@ -51,61 +49,21 @@
                 <a href="/logout">Logout</a>
               {% endif %}
             {% else %}
-              <a href="/cart" class="cart-link">🛒 Cart</a>
               <a href="/admin/login">Admin</a>
               <a href="/register">Register</a>
               <a href="/login">Customer Login</a>
             {% endif %}
-          </div>
             </div>
           </nav>
         </div>
-        {% else %}
-        <div class="header-left">
-          <a href="/cart" class="cart-link" aria-label="Cart">🛒<span class="cart-count" aria-live="polite" aria-atomic="true"></span></a>
-        </div>
-        {% endif %}
         <div class="brand center-logo" style="top: calc({{ settings.logo_top_px or 8 }}px); z-index: {{ settings.logo_zindex or 9999 }};">
           <a href="/" aria-label="Home">
             <img class="logo-img" src="{{ settings.get_logo_url() }}" alt="{{ settings.site_name or 'CyberWorld Store' }}" />
           </a>
         </div>
-        {% if settings.cart_on_right %}
         <div class="header-right">
           <a href="/cart" class="cart-link" aria-label="Cart">🛒<span class="cart-count" aria-live="polite" aria-atomic="true"></span></a>
-        </div>
-        {% else %}
-        <div class="header-right">
-          <button id="mobile-menu-toggle-right" class="mobile-menu-toggle mobile-menu-toggle-right" aria-label="Toggle menu" aria-expanded="false">☰</button>
-          <nav class="main-nav">
-            <div class="nav-panel" aria-hidden="true">
-            {% if current_user.is_authenticated %}
-              {% if current_user.username is defined %}
-                <!-- Admin links - grouped under hamburger menu -->
-                <a href="/admin">Admin</a>
-                <a href="/admin/wallets">Wallets</a>
-                <a href="/admin/sliders">Sliders</a>
-                <a href="/admin/coupons">Coupons</a>
-                <a href="/admin/settings">Settings</a>
-                <a href="/admin/logout">Admin Logout</a>
-              {% else %}
-                <!-- Customer links hidden in panel for access via menu -->
-                <span class="panel-user">{{ current_user.email }}</span>
-                <a href="/account">My Account</a>
-                <a href="/logout">Logout</a>
-              {% endif %}
-            {% else %}
-              <a href="/admin/login">Admin</a>
-              <a href="/register">Register</a>
-              <a href="/login">Customer Login</a>
-            {% endif %}
-          </div>
-            </div>
-          </nav>
           <div class="header-inline-links">
-            {% if not settings.cart_on_right %}
-              <a href="/cart" class="cart-link" aria-label="Cart">🛒<span class="cart-count" aria-live="polite" aria-atomic="true"></span></a>
-            {% endif %}
             {% if current_user.is_authenticated %}
               <a href="/account">My Account</a>
               <a href="/logout">Logout</a>
@@ -115,7 +73,6 @@
             {% endif %}
           </div>
         </div>
-        {% endif %}
       </div>
     </header>
     <main class="container">
@@ -140,33 +97,28 @@
     </footer>
     
     <script>
-      // Mobile nav toggle
+      // Mobile nav toggle (left-only)
       document.addEventListener('DOMContentLoaded', function(){
-        // Toggle all mobile menu buttons; each toggles the nearest .main-nav
-        const toggles = document.querySelectorAll('.mobile-menu-toggle');
-        toggles.forEach(toggle => {
-          const nav = toggle.closest('.header-left, .header-right')?.querySelector('.main-nav') || document.querySelector('.main-nav');
-          if (!nav) return;
-          const panel = nav.querySelector('.nav-panel');
-          toggle.addEventListener('click', () => {
-            nav.classList.toggle('open');
-            const isOpen = nav.classList.contains('open');
-            // actually update aria-hidden on panel and aria-expanded on the toggle
-            if (panel) panel.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
-            toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+        const leftToggle = document.getElementById('mobile-menu-toggle-left');
+        const leftNav = document.querySelector('.header-left .main-nav');
+        const leftPanel = leftNav ? leftNav.querySelector('.nav-panel') : null;
+        if (leftToggle && leftNav) {
+          leftToggle.addEventListener('click', () => {
+            leftNav.classList.toggle('open');
+            const isOpen = leftNav.classList.contains('open');
+            if (leftPanel) leftPanel.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+            leftToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
           });
-        });
-        // Close open nav when clicking outside
+        }
+        // Close open nav when clicking outside (left nav only)
         document.addEventListener('click', (e) => {
-          const openNavs = document.querySelectorAll('.main-nav.open');
-          openNavs.forEach(nav => {
-            if (nav.contains(e.target) || e.target.closest('.mobile-menu-toggle')) return;
-            nav.classList.remove('open');
-            const panel = nav.querySelector('.nav-panel');
-            if (panel) panel.setAttribute('aria-hidden', 'true');
-            const toggles = document.querySelectorAll('.mobile-menu-toggle');
-            toggles.forEach(t => t.setAttribute('aria-expanded', 'false'));
-          });
+          if (!leftNav) return;
+          if (leftNav.contains(e.target) || e.target.closest('#mobile-menu-toggle-left')) return;
+          if (leftNav.classList.contains('open')) {
+            leftNav.classList.remove('open');
+            if (leftPanel) leftPanel.setAttribute('aria-hidden', 'true');
+            if (leftToggle) leftToggle.setAttribute('aria-expanded', 'false');
+          }
         });
       });
 
