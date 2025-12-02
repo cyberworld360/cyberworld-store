@@ -9,19 +9,39 @@ import subprocess
 import sys
 from pathlib import Path
 
-def run_command(cmd, description):
-    """Run a shell command with error handling"""
+def run_command(cmd, description, ignore_errors=False):
+    """Run a command with flexible shell handling.
+
+    - If cmd is a list: we call subprocess.run(cmd, shell=False).
+    - If cmd is a string: we call subprocess.run(cmd, shell=True).
+    - If ignore_errors is True, we print a warning but return True on non-zero exit codes.
+    """
     print(f"\n{'='*60}")
     print(f"📌 {description}")
     print(f"{'='*60}")
-    print(f"$ {cmd}\n")
-    
-    result = subprocess.run(cmd, shell=True, capture_output=False)
-    if result.returncode != 0:
-        print(f"\n❌ Failed: {description}")
+    # Print a pretty representation for lists too
+    if isinstance(cmd, (list, tuple)):
+        print("$ ", ' '.join(str(x) for x in cmd))
+    else:
+        print(f"$ {cmd}\n")
+
+    shell = False if isinstance(cmd, (list, tuple)) else True
+    try:
+        result = subprocess.run(cmd, shell=shell, capture_output=False)
+        if result.returncode != 0:
+            print(f"\n❌ Failed: {description}")
+            if ignore_errors:
+                print("⚠️ Ignoring error and continuing due to ignore_errors=True.")
+                return True
+            return False
+        print(f"✅ Success: {description}")
+        return True
+    except Exception as e:
+        print(f"\n❌ Exception running command: {e}")
+        if ignore_errors:
+            print("⚠️ Ignoring exception and continuing due to ignore_errors=True.")
+            return True
         return False
-    print(f"✅ Success: {description}")
-    return True
 
 def main(argv=None):
     base_dir = Path(__file__).parent
@@ -80,16 +100,17 @@ def main(argv=None):
     
     # Step 6: Git operations
     print("\n📦 Preparing Git...")
-    run_command("git status", "Check git status")
-    run_command("git add -A", "Stage all changes")
-    run_command('git commit -m "chore: Prepare for Vercel deployment" || true', "Commit changes")
+    run_command(["git", "status"], "Check git status")
+    run_command(["git", "add", "-A"], "Stage all changes")
+    # Allow commit to fail if no changes. ignore_errors=True ensures script continues.
+    run_command(["git", "commit", "-m", "chore: Prepare for Vercel deployment"], "Commit changes", ignore_errors=True)
     # Push current branch to origin instead of forcing 'main'
     # This avoids modifying main and respects feature branches/PRs.
     try:
         branch = subprocess.check_output(["git", "rev-parse", "--abbrev-ref", "HEAD"]).decode().strip()
     except Exception:
         branch = 'main'
-    run_command(f"git push origin {branch}", "Push current branch to GitHub")
+    run_command(["git", "push", "origin", branch], "Push current branch to GitHub")
     
     # Step 7: Vercel login (interactive)
     print("\n🔐 Vercel authentication...")
@@ -116,16 +137,28 @@ def main(argv=None):
         # Use the token to run vercel without an interactive login.
         token = vercel_token or os.environ.get('VERCEL_TOKEN')
         if token:
-            deploy_cmd = f"vercel --prod --token {token} {env_args} --confirm"
+            # Use a list invocation for non-interactive vercel so we avoid shell errors on Windows
+            deploy_cmd = ["vercel", "--prod", "--token", token] + env_vars + ["--confirm"]
         else:
             print('VERCEL_TOKEN is not set; non-interactive deploy requested but token missing')
             return False
     else:
+        # When running interactively, we still use string command so users get a shell prompt
         deploy_cmd = f"vercel --prod {env_args}"
     if args.dry_run:
         print(f"DRY RUN: Would execute: {deploy_cmd}")
         return True
-    if not run_command(deploy_cmd, "Deploy to Vercel"):
+    # If deploy_cmd is a list, pass it directly; otherwise run as shell string
+    if isinstance(deploy_cmd, (list, tuple)):
+        if not run_command(deploy_cmd, "Deploy to Vercel"):
+            print("\n⚠️  Deployment may have issues. Check your Vercel account.")
+            print("Manual deployment: https://vercel.com/new")
+            return False
+    else:
+        if not run_command(deploy_cmd, "Deploy to Vercel"):
+            print("\n⚠️  Deployment may have issues. Check your Vercel account.")
+            print("Manual deployment: https://vercel.com/new")
+            return False
         print("\n⚠️  Deployment may have issues. Check your Vercel account.")
         print("Manual deployment: https://vercel.com/new")
         return False
