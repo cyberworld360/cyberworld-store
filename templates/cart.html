@@ -10,7 +10,7 @@
       <tr>
         <td>{{ it.product.title }}</td>
         <td>{{ it.product.price_ghc|money }}</td>
-        <td><input type="number" name="qty_{{ it.product.id }}" value="{{ it.qty }}" min="0" /></td>
+        <td><label for="qty_{{ it.product.id }}">Qty:</label><input id="qty_{{ it.product.id }}" type="number" name="qty_{{ it.product.id }}" value="{{ it.qty }}" min="0" /></td>
         <td>{{ it.subtotal|money }}</td>
       </tr>
       {% endfor %}

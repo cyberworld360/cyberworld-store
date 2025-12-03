@@ -134,6 +134,12 @@ body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial; margin:
 .recent-orders { margin: 10px 0 20px; }
 .export-orders { margin-bottom: 20px; }
 .inline-form { display: inline; }
+/* Order detail / invoice layout helpers */
+.invoice-header { display:flex; gap:20px; align-items:center; margin-bottom:12px; }
+.invoice-logo { height:60px; width:auto; }
+.invoice-item-cell { display:flex; gap:10px; align-items:flex-start; }
+.invoice-thumb { width:56px; height:56px; object-fit:cover; border:1px solid #eee; padding:2px; border-radius:4px; }
+.invoice-summary-text { text-align:right; }
 
 /* Small accessibility and focus improvements */
 .mobile-menu-toggle[aria-expanded="true"] { background: rgba(255,255,255,0.12); }

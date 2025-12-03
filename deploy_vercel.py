@@ -7,43 +7,71 @@ This script sets up and deploys the Flask app to Vercel automatically
 import os
 import subprocess
 import sys
+import platform
 from pathlib import Path
 
-def run_command(cmd, description, ignore_errors=False):
-    """Run a command with flexible shell handling.
-
-    - If cmd is a list: we call subprocess.run(cmd, shell=False).
-    - If cmd is a string: we call subprocess.run(cmd, shell=True).
-    - If ignore_errors is True, we print a warning but return True on non-zero exit codes.
-    """
+def run_command(cmd, description):
+    """Run a shell command with error handling"""
     print(f"\n{'='*60}")
     print(f"📌 {description}")
     print(f"{'='*60}")
-    # Print a pretty representation for lists too
+    # Present the command in a readable form
     if isinstance(cmd, (list, tuple)):
-        print("$ ", ' '.join(str(x) for x in cmd))
+        display_cmd = ' '.join(cmd)
     else:
-        print(f"$ {cmd}\n")
+        display_cmd = cmd
+    print(f"$ {display_cmd}\n")
 
-    shell = False if isinstance(cmd, (list, tuple)) else True
+    # If cmd is a sequence already, prefer shell=False to avoid MSYS/sh involvement on Windows
     try:
-        result = subprocess.run(cmd, shell=shell, capture_output=False)
-        if result.returncode != 0:
-            print(f"\n❌ Failed: {description}")
-            if ignore_errors:
-                print("⚠️ Ignoring error and continuing due to ignore_errors=True.")
-                return True
-            return False
-        print(f"✅ Success: {description}")
-        return True
+        shell_flag = False
+        run_args = {}
+        if isinstance(cmd, (list, tuple)):
+            run_target = cmd
+            shell_flag = False
+        else:
+            # If the command contains shell-only operators, run via shell=True
+            shell_ops = ['&&', '||', '|', '>', '<']
+            if any(op in cmd for op in shell_ops):
+                run_target = cmd
+                shell_flag = True
+            else:
+                # Split the command into args for shell-free execution (safer on Windows)
+                run_target = cmd.split()
+                shell_flag = False
+
+        # Capture stdout/stderr for diagnostic output
+        result = subprocess.run(run_target, shell=shell_flag, capture_output=True, text=True)
+        if result.stdout:
+            print("--- stdout ---")
+            print(result.stdout)
+        if result.stderr:
+            print("--- stderr ---")
+            print(result.stderr)
+    except FileNotFoundError as e:
+        print(f"\n❌ Command not found: {e}")
+        return False
     except Exception as e:
-        print(f"\n❌ Exception running command: {e}")
-        if ignore_errors:
-            print("⚠️ Ignoring exception and continuing due to ignore_errors=True.")
-            return True
+        print(f"\n❌ Error running command: {e}")
         return False
 
+    if result.returncode != 0:
+        print(f"\n❌ Failed: {description} (exit {result.returncode})")
+        return False
+    print(f"✅ Success: {description}")
+    return True
+
 def main(argv=None):
+    # Ensure stdout/stderr use UTF-8 to avoid UnicodeEncodeError on Windows consoles
+    try:
+        if hasattr(sys.stdout, 'reconfigure'):
+            sys.stdout.reconfigure(encoding='utf-8')
+        if hasattr(sys.stderr, 'reconfigure'):
+            sys.stderr.reconfigure(encoding='utf-8')
+    except Exception:
+        # best-effort; if reconfigure isn't available, continue
+        pass
+
     base_dir = Path(__file__).parent
     import argparse
     parser = argparse.ArgumentParser(description='Deploy to Vercel')
@@ -69,12 +97,10 @@ def main(argv=None):
     # In dry-run mode, skip node/npm checks: we only want to validate steps
     if not args.dry_run:
         if not run_command("node --version", "Check Node.js"):
-            print("⚠️  Node.js not found. Please install from https://nodejs.org")
-            return False
+            print("⚠️  Node.js not found. Continuing — Vercel CLI may still work if installed separately.")
         if not run_command("npm --version", "Check npm"):
-            print("⚠️  npm not found")
-            return False
-        # Install Vercel CLI if not present
+            print("⚠️  npm not found. Continuing — npm may not be required if Vercel CLI is available.")
+        # Install Vercel CLI if not present (best-effort)
         run_command("npm install -g vercel", "Install Vercel CLI")
     
     # Step 2: Validate local environment
@@ -100,72 +126,68 @@ def main(argv=None):
     
     # Step 6: Git operations
     print("\n📦 Preparing Git...")
-    run_command(["git", "status"], "Check git status")
-    run_command(["git", "add", "-A"], "Stage all changes")
-    # Allow commit to fail if no changes. ignore_errors=True ensures script continues.
-    run_command(["git", "commit", "-m", "chore: Prepare for Vercel deployment"], "Commit changes", ignore_errors=True)
+    run_command("git status", "Check git status")
+    run_command("git add -A", "Stage all changes")
+    run_command('git commit -m "chore: Prepare for Vercel deployment" || true', "Commit changes")
     # Push current branch to origin instead of forcing 'main'
     # This avoids modifying main and respects feature branches/PRs.
     try:
         branch = subprocess.check_output(["git", "rev-parse", "--abbrev-ref", "HEAD"]).decode().strip()
     except Exception:
         branch = 'main'
-    run_command(["git", "push", "origin", branch], "Push current branch to GitHub")
+    run_command(f"git push origin {branch}", "Push current branch to GitHub")
     
     # Step 7: Vercel login (interactive)
+    # Determine vercel executable for this platform
+    vercel_exe = 'vercel.cmd' if platform.system() == 'Windows' else 'vercel'
+
     print("\n🔐 Vercel authentication...")
     print("Please login to Vercel (if not already logged in):")
-    run_command("vercel login", "Login to Vercel")
+    run_command([vercel_exe, 'login'], "Login to Vercel")
     
     # Step 8: Deploy
     print("\n🚀 Deploying to Vercel...")
     
-    env_vars = []
-    env_file_content = env_file.read_text()
-    for line in env_file_content.splitlines():
-        line = line.strip()
-        if line and not line.startswith("#") and "=" in line:
-            key, value = line.split("=", 1)
-            value = value.strip().strip('"\'')
-            env_vars.append(f'--env "{key}={value}"')
-    
-    env_args = " ".join(env_vars)
-    
+    # Parse .env into a dictionary of env vars (if present)
+    env = {}
+    if env_file.exists():
+        env_file_content = env_file.read_text()
+        for line in env_file_content.splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                key, value = line.split("=", 1)
+                value = value.strip().strip('"\'')
+                env[key] = value
+
+
     # If a VERCEL_TOKEN is provided, run non-interactively using it (CI friendly)
     vercel_token = os.environ.get('VERCEL_TOKEN') or os.environ.get('VERCEL_TOKEN'.upper())
     if vercel_token or args.non_interactive:
-        # Use the token to run vercel without an interactive login.
         token = vercel_token or os.environ.get('VERCEL_TOKEN')
         if token:
-            # Use a list invocation for non-interactive vercel so we avoid shell errors on Windows
-            deploy_cmd = ["vercel", "--prod", "--token", token] + env_vars + ["--confirm"]
+            # Do NOT pass the token on the command-line to avoid leaking it in logs.
+            # Vercel CLI will use the VERCEL_TOKEN environment variable automatically.
+            deploy_cmd = [vercel_exe, '--prod', '--confirm']
         else:
             print('VERCEL_TOKEN is not set; non-interactive deploy requested but token missing')
             return False
     else:
-        # When running interactively, we still use string command so users get a shell prompt
-        deploy_cmd = f"vercel --prod {env_args}"
+        deploy_cmd = [vercel_exe, '--prod']
+
+    # Append environment variables as `--env KEY=VALUE` pairs
+    for k, v in env.items():
+        deploy_cmd.extend(['--env', f"{k}={v}"])
     if args.dry_run:
         print(f"DRY RUN: Would execute: {deploy_cmd}")
         return True
-    # If deploy_cmd is a list, pass it directly; otherwise run as shell string
-    if isinstance(deploy_cmd, (list, tuple)):
-        if not run_command(deploy_cmd, "Deploy to Vercel"):
-            print("\n⚠️  Deployment may have issues. Check your Vercel account.")
-            print("Manual deployment: https://vercel.com/new")
-            return False
-    else:
-        if not run_command(deploy_cmd, "Deploy to Vercel"):
-            print("\n⚠️  Deployment may have issues. Check your Vercel account.")
-            print("Manual deployment: https://vercel.com/new")
-            return False
+    if not run_command(deploy_cmd, "Deploy to Vercel"):
         print("\n⚠️  Deployment may have issues. Check your Vercel account.")
         print("Manual deployment: https://vercel.com/new")
         return False
     
     # Step 9: Get deployment info
     print("\n📍 Retrieving deployment info...")
-    run_command("vercel ls --limit 5", "List recent deployments")
+    run_command([vercel_exe, 'ls', '--limit', '5'], "List recent deployments")
     
     print("""
 ╔═══════════════════════════════════════════════════════════╗

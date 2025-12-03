@@ -11,9 +11,9 @@
 </style>
 <div class="invoice">
   <button class="btn btn-primary print-btn" onclick="window.print()">Print</button>
-  <div style="display:flex; align-items:center; gap:20px; margin-bottom:12px">
-    <img src="{{ settings.logo_image }}" alt="logo" style="height:60px;"/>
-    <h2 style="margin:0">Order — {{ order.reference }}</h2>
+  <div class="invoice-header">
+    <img src="{{ settings.logo_image }}" alt="logo" class="invoice-logo"/>
+    <h2>Order — {{ order.reference }}</h2>
   </div>
   <div class="meta">
     <div>
@@ -34,9 +34,9 @@
     <tbody>
       {% for it in items %}
       <tr>
-        <td style="display:flex; gap:10px; align-items:flex-start">
+        <td class="invoice-item-cell">
           {% if it.product and it.product.image %}
-            <img src="{{ it.product.image }}" alt="thumb" style="width:56px;height:56px;object-fit:cover;border:1px solid #eee;padding:2px;border-radius:4px" />
+            <img src="{{ it.product.image }}" alt="thumb" class="invoice-thumb" />
           {% endif %}
           <div style="flex:1">
             {% if it.product_id %}
@@ -54,7 +54,7 @@
     </tbody>
     <tfoot>
       <tr>
-        <td colspan="3" style="text-align:right"><strong>Subtotal</strong></td>
+        <td colspan="3" class="invoice-summary-text"><strong>Subtotal</strong></td>
         <td>{{ order.subtotal|money }}</td>
       </tr>
       <tr>

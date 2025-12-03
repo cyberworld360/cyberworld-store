@@ -56,7 +56,7 @@
             </div>
           </nav>
         </div>
-        <div class="brand center-logo" style="top: calc({{ settings.logo_top_px or 8 }}px); z-index: {{ settings.logo_zindex or 9999 }};">
+        <div class="brand center-logo">
           <a href="/" aria-label="Home">
             <img class="logo-img" src="{{ settings.get_logo_url() }}" alt="{{ settings.site_name or 'CyberWorld Store' }}" />
           </a>
@@ -87,13 +87,13 @@
       {% endwith %}
       {% block content %}{% endblock %}
     </main>
-    {% if settings.custom_css %}
-    <style>
+                {% if settings.custom_css and settings.custom_css|trim %}
+                <style>
     {{ settings.custom_css|safe }}
-    </style>
-    {% endif %}
+                </style>
+                {% endif %}
     <footer class="site-footer">
-      <div class="container">© {{ now.year }} CyberWorld</div>
+      <div class="container">© {{ now.year }} Cyber World Store</div>
     </footer>
     
     <script>
