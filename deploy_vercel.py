@@ -158,6 +158,12 @@ def main(argv=None):
                 key, value = line.split("=", 1)
                 value = value.strip().strip('"\'')
                 env[key] = value
+    
+    # Force ephemeral SQLite on Vercel to avoid unresolvable internal DB hostnames
+    env['FORCE_EPHEMERAL'] = '1'
+    if 'DATABASE_URL' not in env or 'wandering-maroon' in env.get('DATABASE_URL', ''):
+        # Replace internal kubernetes hostname with ephemeral sqlite
+        env['DATABASE_URL'] = 'sqlite:////tmp/data.db'
 
 
     # If a VERCEL_TOKEN is provided, run non-interactively using it (CI friendly)
