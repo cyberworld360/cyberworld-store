@@ -1019,50 +1019,6 @@ slider_product = db.Table('slider_product',
     db.Column('product_id', db.Integer, db.ForeignKey('product.id'), primary_key=True)
 )
 
-class Coupon(db.Model):
-    """Discount coupons for customers"""
-    id = db.Column(db.Integer, primary_key=True)
-    code = db.Column(db.String(50), unique=True, nullable=False, index=True)
-    discount_type = db.Column(db.String(20), default='percent')  # 'percent' or 'fixed'
-    discount_value = db.Column(db.Numeric(10, 2), nullable=False)
-    max_uses = db.Column(db.Integer, default=None)  # None = unlimited
-    current_uses = db.Column(db.Integer, default=0)
-    min_amount = db.Column(db.Numeric(10, 2), default=0)  # Minimum order amount
-    max_discount = db.Column(db.Numeric(10, 2), default=None)  # Max discount cap for percent
-    expiry_date = db.Column(db.DateTime, default=None)  # None = no expiry
-    is_active = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=utc_now)
-    # note: `card_size` belongs to Product (card display size), not Coupon
-
-    def is_valid(self):
-        """Check if coupon is still valid"""
-        if not self.is_active:
-            return False, "Coupon is inactive"
-        if self.max_uses and self.current_uses >= self.max_uses:
-            return False, "Coupon usage limit reached"
-        # Compare expiry dates safely (handle both naive and aware datetimes)
-        if self.expiry_date:
-            now = utc_now()
-            expiry = self.expiry_date
-            # If expiry is naive, make it aware in UTC
-            if expiry.tzinfo is None:
-                from datetime import timezone as dt_timezone
-                expiry = expiry.replace(tzinfo=dt_timezone.utc)
-            if now > expiry:
-                return False, "Coupon has expired"
-        return True, "Valid"
-    
-    def calculate_discount(self, amount):
-        """Calculate discount amount"""
-        amount = Decimal(str(amount))
-        if self.discount_type == 'percent':
-            discount = (amount * Decimal(str(self.discount_value))) / Decimal('100')
-            if self.max_discount:
-                discount = min(discount, Decimal(str(self.max_discount)))
-        else:  # fixed
-            discount = Decimal(str(self.discount_value))
-        return min(discount, amount)
-
 class Settings(db.Model):
     """Store site-wide settings like logo, banner, fonts, etc"""
     id = db.Column(db.Integer, primary_key=True)
