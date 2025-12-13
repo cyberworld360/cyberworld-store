@@ -1693,19 +1693,25 @@ def _ensure_product_created_at_column():
 # --- Public pages ---
 @app.route("/")
 def index():
-    # Ensure DB has the expected schema (defensive for older DBs)
-    _ensure_product_created_at_column()
-
-    # Get all products sorted by latest first (fall back to id if ordering by created_at fails)
+    # Try ORM first, fall back to raw SQL if schema mismatch
     try:
         prods = Product.query.order_by(Product.created_at.desc(), Product.id.desc()).all()
         featured = Product.query.filter_by(featured=True).order_by(Product.created_at.desc()).all()
     except Exception:
-        app.logger.exception('Ordering by created_at failed; falling back to id ordering')
-        prods = Product.query.order_by(Product.id.desc()).all()
-        featured = Product.query.filter_by(featured=True).order_by(Product.id.desc()).all()
+        app.logger.exception('ORM query failed; falling back to raw SQL')
+        try:
+            # Raw SQL that doesn't depend on created_at column
+            rows = db.session.execute("SELECT id, title, short, price_ghc, old_price_ghc, image, featured, card_size FROM product ORDER BY id DESC").fetchall()
+            from types import SimpleNamespace
+            prods = [SimpleNamespace(id=r[0], title=r[1], short=r[2], price_ghc=r[3], old_price_ghc=r[4], image=r[5], featured=bool(r[6]), card_size=r[7], created_at=None) for r in rows]
+            
+            featured_rows = db.session.execute("SELECT id, title, short, price_ghc, old_price_ghc, image, featured, card_size FROM product WHERE featured=1 ORDER BY id DESC").fetchall()
+            featured = [SimpleNamespace(id=r[0], title=r[1], short=r[2], price_ghc=r[3], old_price_ghc=r[4], image=r[5], featured=bool(r[6]), card_size=r[7], created_at=None) for r in featured_rows]
+        except Exception:
+            app.logger.exception('Raw SQL fallback for index failed')
+            prods, featured = [], []
     
-    # Mark products created in the last 7 days as 'latest'
+    # Mark products created in the last 7 days as 'latest' (if created_at exists)
     from datetime import timedelta
     cutoff_date = utc_now() - timedelta(days=7)
     for p in prods:
@@ -1771,8 +1777,16 @@ def view_cart():
             pid = int(pid_str); qty = int(qty)
         except Exception:
             continue
-        p = db.session.get(Product, pid)
-        if not p:
+        try:
+            p = db.session.get(Product, pid)
+            if not p:
+                # Fallback to raw SQL
+                row = db.session.execute("SELECT id, title, short, price_ghc, old_price_ghc, image, featured, card_size FROM product WHERE id = :id", {'id': pid}).fetchone()
+                if not row:
+                    continue
+                from types import SimpleNamespace
+                p = SimpleNamespace(id=row[0], title=row[1], short=row[2], price_ghc=row[3], old_price_ghc=row[4], image=row[5], featured=bool(row[6]), card_size=row[7], created_at=None)
+        except Exception:
             continue
         subtotal = Decimal(p.price_ghc) * qty
         items.append({"product": p, "qty": qty, "subtotal": subtotal})
