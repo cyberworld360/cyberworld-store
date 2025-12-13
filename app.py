@@ -49,6 +49,8 @@ import tempfile
 # Optional modern integrations
 REDIS_URL = os.environ.get("REDIS_URL", "")
 SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY", "")
+# Default model for AI integrations (set to Claude Haiku 4.5 by default)
+DEFAULT_MODEL = os.environ.get("DEFAULT_MODEL", "claude-haiku-4.5")
 DEFAULT_MODEL = os.environ.get("DEFAULT_MODEL", "claude-haiku-4.5")
 USE_RQ = False
 if REDIS_URL:
