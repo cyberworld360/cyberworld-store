@@ -780,6 +780,41 @@ textarea {
   z-index: 10;
 }
 
+.badge-latest {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: linear-gradient(135deg, #ff4d4f 0%, #ff7875 100%);
+  color: #fff;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  font-weight: 700;
+  z-index: 10;
+  box-shadow: 0 4px 12px rgba(255, 77, 79, 0.3);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    box-shadow: 0 4px 12px rgba(255, 77, 79, 0.3);
+  }
+  50% {
+    box-shadow: 0 4px 20px rgba(255, 77, 79, 0.5);
+  }
+}
+
+.card-latest {
+  border: 2px solid var(--danger-color);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(255, 77, 79, 0.15);
+}
+
+.card-latest:hover {
+  box-shadow: 0 16px 40px rgba(255, 77, 79, 0.25);
+  transform: translateY(-6px);
+}
+
 .product-info {
   padding: 1.2rem;
   flex: 1;

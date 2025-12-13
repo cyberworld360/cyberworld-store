@@ -678,6 +678,7 @@ class Product(db.Model):
     product_image_mime = db.Column(db.String(50), nullable=True)
     featured = db.Column(db.Boolean, default=False)
     card_size = db.Column(db.String(20), default='medium')
+    created_at = db.Column(db.DateTime, default=utc_now)
 
     def to_dict(self):
         return {
@@ -1665,8 +1666,16 @@ def inject_context():
 # --- Public pages ---
 @app.route("/")
 def index():
-    prods = Product.query.order_by(Product.id.desc()).all()
-    featured = Product.query.filter_by(featured=True).all()
+    # Get all products sorted by latest first
+    prods = Product.query.order_by(Product.created_at.desc(), Product.id.desc()).all()
+    featured = Product.query.filter_by(featured=True).order_by(Product.created_at.desc()).all()
+    
+    # Mark products created in the last 7 days as 'latest'
+    from datetime import timedelta
+    cutoff_date = utc_now() - timedelta(days=7)
+    for p in prods:
+        p.is_latest = p.created_at >= cutoff_date if p.created_at else False
+    
     return render_template("index.html", products=prods, featured=featured)
 
 @app.route("/product/<int:pid>")
@@ -2768,7 +2777,7 @@ def admin_index():
         flash('Admin access required. Please login as admin.', 'danger')
         return redirect(url_for('index'))
 
-    prods = Product.query.order_by(Product.id.desc()).all()
+    prods = Product.query.order_by(Product.created_at.desc(), Product.id.desc()).all()
     recent_orders = Order.query.order_by(Order.created_at.desc()).limit(5).all()
     settings = get_settings()
     dashboard_layout = settings.dashboard_layout if settings and hasattr(settings, 'dashboard_layout') else 'grid'

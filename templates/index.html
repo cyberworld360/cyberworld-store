@@ -85,11 +85,17 @@
   </div>
   <div class="featured-track">
     {% for p in featured %}
-    <div class="card">
-      <img loading="lazy" src="{{ p.image or settings.get_bg_url() }}" alt="{{ p.title }}" />
+    <div class="card {% if p.is_latest %}card-latest{% endif %}">
+      <div style="position: relative;">
+        <img loading="lazy" src="{{ p.image or settings.get_bg_url() }}" alt="{{ p.title }}" />
+        {% if p.is_latest %}
+        <span class="badge-latest">🆕 NEW</span>
+        {% endif %}
+        <span class="badge-featured">⭐ Featured</span>
+      </div>
       <h4>{{ p.title }}</h4>
       <p class="price">{{ p.price_ghc|money }} {% if p.old_price_ghc %}<span class="old">{{ p.old_price_ghc|money }}</span>{% endif %}</p>
-      <a href="/product/{{ p.id }}" class="btn-outline">View</a>
+      <a href="/product/{{ p.id }}" class="btn btn-primary" style="width: 100%; text-align: center; margin-top: auto;">View Details</a>
     </div>
     {% endfor %}
   </div>
@@ -99,17 +105,25 @@
   <h2 style="margin: 2rem 0 1rem 0;">📦 All Products</h2>
   <div class="grid">
     {% for p in products %}
-    <div class="card card-{{ p.card_size or 'medium' }}">
-      <img loading="lazy" src="{{ p.image or settings.get_bg_url() }}" alt="{{ p.title }}" />
+    <div class="card card-{{ p.card_size or 'medium' }} {% if p.is_latest %}card-latest{% endif %}">
+      <div style="position: relative;">
+        <img loading="lazy" src="{{ p.image or settings.get_bg_url() }}" alt="{{ p.title }}" />
+        {% if p.is_latest %}
+        <span class="badge-latest">🆕 NEW</span>
+        {% endif %}
+        {% if p.featured %}
+        <span class="badge-featured" style="top: 50px;">⭐ FEATURED</span>
+        {% endif %}
+      </div>
       <h4>{{ p.title }}</h4>
       <p>{{ p.short }}</p>
       <p class="price">{{ p.price_ghc|money }} {% if p.old_price_ghc %}<span class="old">{{ p.old_price_ghc|money }}</span>{% endif %}</p>
       <form action="/cart/add/{{ p.id }}" method="post" aria-label="Add {{ p.title }} to cart">
         <label for="qty-{{ p.id }}" class="sr-only">Quantity for {{ p.title }}</label>
         <input id="qty-{{ p.id }}" type="number" name="qty" value="1" min="1" title="Quantity" placeholder="Qty" aria-label="Quantity" />
-        <button class="btn" type="submit">Add to cart</button>
+        <button class="btn btn-primary" type="submit">🛒 Add to cart</button>
       </form>
-      <a href="/product/{{ p.id }}" class="btn-outline">View</a>
+      <a href="/product/{{ p.id }}" class="btn btn-outline">View Details</a>
     </div>
     {% endfor %}
   </div>
