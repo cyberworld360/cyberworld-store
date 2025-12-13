@@ -24,7 +24,7 @@ def load_dotenv(path: str = ".env"):
 
 from flask import (
     Flask, render_template, request, redirect, url_for, flash, session,
-    send_from_directory, jsonify, abort
+    send_from_directory, jsonify, abort, Response
 )
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
@@ -49,6 +49,7 @@ import tempfile
 # Optional modern integrations
 REDIS_URL = os.environ.get("REDIS_URL", "")
 SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY", "")
+DEFAULT_MODEL = os.environ.get("DEFAULT_MODEL", "claude-haiku-4.5")
 USE_RQ = False
 if REDIS_URL:
     try:
@@ -169,6 +170,41 @@ else:
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["UPLOAD_FOLDER"] = str(UPLOAD_FOLDER)
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024  # 5MB
+
+
+# Serve uploaded images path with graceful fallback when files are missing.
+# On Vercel the filesystem is ephemeral, so uploaded images may be absent.
+@app.route('/uploads/images/<path:filename>')
+def uploaded_image(filename):
+    """Serve an uploaded image from several candidate locations.
+
+    If the file is missing, return a small SVG placeholder so pages don't show broken images.
+    """
+    candidates = [
+        BASE_DIR / 'uploads' / 'images' / filename,
+        BASE_DIR / 'static' / 'uploads' / 'images' / filename,
+        Path(app.config.get('UPLOAD_FOLDER', '')) / filename,
+    ]
+    for p in candidates:
+        try:
+            if p and p.exists():
+                return send_from_directory(str(p.parent), p.name)
+        except Exception:
+            continue
+
+    # Log missing file for diagnostics
+    app.logger.warning('Uploaded image not found: %s', filename)
+
+    # Return a small inline SVG placeholder
+    svg = (
+        "<svg xmlns='http://www.w3.org/2000/svg' width='400' height='300' viewBox='0 0 400 300'>"
+        "<rect width='100%' height='100%' fill='#f3f4f6'/>"
+        "<text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle'"
+        " font-family='Arial, Helvetica, sans-serif' font-size='20' fill='#9ca3af'>"
+        "Image not available"
+        "</text></svg>"
+    )
+    return Response(svg, mimetype='image/svg+xml')
 
 # Configure structured logging to stdout so Vercel captures full logs and tracebacks
 log_level = logging.DEBUG if os.environ.get("DEBUG", "").lower() in ("1", "true", "yes") else logging.INFO
@@ -1613,6 +1649,15 @@ def initdb_command():
 
     db.session.commit()
     print("DB initialized and sample data added (if applicable).")
+
+
+# --- Context processor for templates ---
+@app.context_processor
+def inject_context():
+    """Expose global variables to all templates."""
+    return {
+        'DEFAULT_MODEL': DEFAULT_MODEL
+    }
 
 
 # --- Public pages ---

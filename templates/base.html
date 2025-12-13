@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>CyberWorld Store</title>
+    <title>CyberWorldStore</title>
     <link rel="stylesheet" href="/static/css/style.css">
     <style>
       :root {
@@ -30,7 +30,7 @@
       <div class="container header-grid">
         <!-- Header Left: Hamburger menu and nav panel -->
         <div class="header-left">
-          <button id="mobile-menu-toggle-left" class="mobile-menu-toggle mobile-menu-toggle-left" aria-label="Toggle menu" aria-expanded="false">☰</button>
+          <button id="mobile-menu-toggle-left" class="mobile-menu-toggle mobile-menu-toggle-left" aria-label="Toggle menu" aria-expanded="true">☰</button>
           <nav class="main-nav">
             <div class="nav-panel" aria-hidden="true">
             {% if current_user.is_authenticated %}
@@ -58,7 +58,7 @@
         </div>
         <div class="brand center-logo">
           <a href="/" aria-label="Home">
-            <img class="logo-img" src="{{ settings.get_logo_url() }}" alt="{{ settings.site_name or 'CyberWorld Store' }}" />
+            <img class="logo-img" src="{{ settings.get_logo_url() }}" alt="{{ settings.site_name or 'Cyber World Store' }}" />
           </a>
         </div>
         <div class="header-right">
@@ -68,8 +68,6 @@
               <a href="/account">My Account</a>
               <a href="/logout">Logout</a>
             {% else %}
-              <a href="/register">Register</a>
-              <a href="/login">Login</a>
             {% endif %}
           </div>
         </div>

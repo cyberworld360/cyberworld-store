@@ -1,0 +1,270 @@
+
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ     CyberWorld Store - Vercel Deployment Automation      Γòæ
+Γòæ                                                          Γòæ
+Γòæ  This script will:                                       Γòæ
+Γòæ  1. Check dependencies                                   Γòæ
+Γòæ  2. Validate configuration                               Γòæ
+Γòæ  3. Build and test the Flask app                        Γòæ
+Γòæ  4. Deploy to Vercel                                     Γòæ
+Γòæ  5. Configure environment variables                      Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+    
+
+≡ƒöì Checking prerequisites...
+
+============================================================
+≡ƒôî Check Node.js
+============================================================
+$ node --version
+
+--- stdout ---
+v24.11.0
+
+Γ£à Success: Check Node.js
+
+============================================================
+≡ƒôî Check npm
+============================================================
+$ npm --version
+
+
+Γ¥î Command not found: [WinError 2] The system cannot find the file specified
+ΓÜá∩╕Å  npm not found. Continuing ΓÇö npm may not be required if Vercel CLI is available.
+
+============================================================
+≡ƒôî Install Vercel CLI
+============================================================
+$ npm install -g vercel
+
+
+Γ¥î Command not found: [WinError 2] The system cannot find the file specified
+
+≡ƒöì Validating configuration...
+Γ£à .env file found
+
+≡ƒÉì Checking Python environment...
+
+============================================================
+≡ƒôî Check Python version
+============================================================
+$ .venv\Scripts\python.exe --version
+
+--- stdout ---
+Python 3.13.9
+
+Γ£à Success: Check Python version
+
+============================================================
+≡ƒôî Install Python dependencies
+============================================================
+$ .venv\Scripts\pip.exe install -r requirements.txt
+
+--- stdout ---
+Requirement already satisfied: Flask==2.2.5 in c:\users\cyber360\desktop\cyberworld_paystack_clone_final\.venv\lib\site-packages (from -r requirements.txt (line 1)) (2.2.5)
+Requirement already satisfied: Flask-Login==0.6.2 in c:\users\cyber360\desktop\cyberworld_paystack_clone_final\.venv\lib\site-packages (from -r requirements.txt (line 2)) (0.6.2)
+Requirement already satisfied: Flask-SQLAlchemy==3.0.3 in c:\users\cyber360\desktop\cyberworld_paystack_clone_final\.venv\lib\site-packages (from -r requirements.txt (line 3)) (3.0.3)
+Requirement already satisfied: python-dotenv==1.0.0 in c:\users\cyber360\desktop\cyberworld_paystack_clone_final\.venv\lib\site-packages (from -r requirements.txt (line 4)) (1.0.0)
+Requirement already satisfied: requests==2.31.0 in c:\users\cyber360\desktop\cyberworld_paystack_clone_final\.venv\lib\site-packages (from -r requirements.txt (line 5)) (2.31.0)
+Requirement already satisfied: Werkzeug==2.3.7 in c:\users\cyber360\desktop\cyberworld_paystack_clone_final\.venv\lib\site-packages (from -r requirements.txt (line 6)) (2.3.7)
+Requirement already satisfied: gunicorn==20.1.0 in c:\users\cyber360\desktop\cyberworld_paystack_clone_final\.venv\lib\site-packages (from -r requirements.txt (line 7)) (20.1.0)
+Requirement already satisfied: Flask-Migrate==4.0.4 in c:\users\cyber360\desktop\cyberworld_paystack_clone_final\.venv\lib\site-packages (from -r requirements.txt (line 8)) (4.0.4)
+Requirement already satisfied: alembic==1.17.1 in c:\users\cyber360\desktop\cyberworld_paystack_clone_final\.venv\lib\site-packages (from -r requirements.txt (line 9)) (1.17.1)
+Requirement already satisfied: asgiref==3.9.0 in c:\users\cyber360\desktop\cyberworld_paystack_clone_final\.venv\lib\site-packages (from -r requirements.txt (line 10)) (3.9.0)
+Requirement already satisfied: boto3==1.28.84 in c:\users\cyber360\desktop\cyberworld_paystack_clone_final\.venv\lib\site-packages (from -r requirements.txt (line 11)) (1.28.84)
+Requirement already satisfied: pg8000==1.29.4 in c:\users\cyber360\desktop\cyberworld_paystack_clone_final\.venv\lib\site-packages (from -r requirements.txt (line 12)) (1.29.4)
+Requirement already satisfied: Jinja2>=3.0 in c:\users\cyber360\desktop\cyberworld_paystack_clone_final\.venv\lib\site-packages (from Flask==2.2.5->-r requirements.txt (line 1)) (3.1.6)
+Requirement already satisfied: itsdangerous>=2.0 in c:\users\cyber360\desktop\cyberworld_paystack_clone_final\.venv\lib\site-packages (from Flask==2.2.5->-r requirements.txt (line 1)) (2.2.0)
+Requirement already satisfied: click>=8.0 in c:\users\cyber360\desktop\cyberworld_paystack_clone_final\.venv\lib\site-packages (from Flask==2.2.5->-r requirements.txt (line 1)) (8.3.0)
+Requirement already satisfied: SQLAlchemy>=1.4.18 in c:\users\cyber360\desktop\cyberworld_paystack_clone_final\.venv\lib\site-packages (from Flask-SQLAlchemy==3.0.3->-r requirements.txt (line 3)) (2.0.44)
+Requirement already satisfied: charset-normalizer<4,>=2 in c:\users\cyber360\desktop\cyberworld_paystack_clone_final\.venv\lib\site-packages (from requests==2.31.0->-r requirements.txt (line 5)) (3.4.4)
+Requirement already satisfied: idna<4,>=2.5 in c:\users\cyber360\desktop\cyberworld_paystack_clone_final\.venv\lib\site-packages (from requests==2.31.0->-r requirements.txt (line 5)) (3.11)
+Requirement already satisfied: urllib3<3,>=1.21.1 in c:\users\cyber360\desktop\cyberworld_paystack_clone_final\.venv\lib\site-packages (from requests==2.31.0->-r requirements.txt (line 5)) (2.0.7)
+Requirement already satisfied: certifi>=2017.4.17 in c:\users\cyber360\desktop\cyberworld_paystack_clone_final\.venv\lib\site-packages (from requests==2.31.0->-r requirements.txt (line 5)) (2025.11.12)
+Requirement already satisfied: MarkupSafe>=2.1.1 in c:\users\cyber360\desktop\cyberworld_paystack_clone_final\.venv\lib\site-packages (from Werkzeug==2.3.7->-r requirements.txt (line 6)) (3.0.3)
+Requirement already satisfied: setuptools>=3.0 in c:\users\cyber360\desktop\cyberworld_paystack_clone_final\.venv\lib\site-packages (from gunicorn==20.1.0->-r requirements.txt (line 7)) (80.9.0)
+Requirement already satisfied: Mako in c:\users\cyber360\desktop\cyberworld_paystack_clone_final\.venv\lib\site-packages (from alembic==1.17.1->-r requirements.txt (line 9)) (1.3.10)
+Requirement already satisfied: typing-extensions>=4.12 in c:\users\cyber360\desktop\cyberworld_paystack_clone_final\.venv\lib\site-packages (from alembic==1.17.1->-r requirements.txt (line 9)) (4.15.0)
+Requirement already satisfied: botocore<1.32.0,>=1.31.84 in c:\users\cyber360\desktop\cyberworld_paystack_clone_final\.venv\lib\site-packages (from boto3==1.28.84->-r requirements.txt (line 11)) (1.31.85)
+Requirement already satisfied: jmespath<2.0.0,>=0.7.1 in c:\users\cyber360\desktop\cyberworld_paystack_clone_final\.venv\lib\site-packages (from boto3==1.28.84->-r requirements.txt (line 11)) (1.0.1)
+Requirement already satisfied: s3transfer<0.8.0,>=0.7.0 in c:\users\cyber360\desktop\cyberworld_paystack_clone_final\.venv\lib\site-packages (from boto3==1.28.84->-r requirements.txt (line 11)) (0.7.0)
+Requirement already satisfied: scramp>=1.4.3 in c:\users\cyber360\desktop\cyberworld_paystack_clone_final\.venv\lib\site-packages (from pg8000==1.29.4->-r requirements.txt (line 12)) (1.4.6)
+Requirement already satisfied: python-dateutil>=2.8.2 in c:\users\cyber360\desktop\cyberworld_paystack_clone_final\.venv\lib\site-packages (from pg8000==1.29.4->-r requirements.txt (line 12)) (2.9.0.post0)
+Requirement already satisfied: six>=1.5 in c:\users\cyber360\desktop\cyberworld_paystack_clone_final\.venv\lib\site-packages (from python-dateutil>=2.8.2->pg8000==1.29.4->-r requirements.txt (line 12)) (1.17.0)
+Requirement already satisfied: colorama in c:\users\cyber360\desktop\cyberworld_paystack_clone_final\.venv\lib\site-packages (from click>=8.0->Flask==2.2.5->-r requirements.txt (line 1)) (0.4.6)
+Requirement already satisfied: asn1crypto>=1.5.1 in c:\users\cyber360\desktop\cyberworld_paystack_clone_final\.venv\lib\site-packages (from scramp>=1.4.3->pg8000==1.29.4->-r requirements.txt (line 12)) (1.5.1)
+Requirement already satisfied: greenlet>=1 in c:\users\cyber360\desktop\cyberworld_paystack_clone_final\.venv\lib\site-packages (from SQLAlchemy>=1.4.18->Flask-SQLAlchemy==3.0.3->-r requirements.txt (line 3)) (3.2.4)
+
+Γ£à Success: Install Python dependencies
+
+≡ƒº¬ Testing Flask app...
+
+============================================================
+≡ƒôî Check app.py syntax
+============================================================
+$ .venv\Scripts\python.exe -m py_compile app.py
+
+Γ£à Success: Check app.py syntax
+
+============================================================
+≡ƒôî Check API wrapper syntax
+============================================================
+$ .venv\Scripts\python.exe -m py_compile api/index.py
+
+Γ£à Success: Check API wrapper syntax
+
+≡ƒôª Preparing Git...
+
+============================================================
+≡ƒôî Check git status
+============================================================
+$ git status
+
+--- stdout ---
+On branch main
+Your branch is up to date with 'origin/main'.
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   deploy_vercel.py
+	modified:   static/css/style.css
+	modified:   templates/admin_coupons.html
+	modified:   templates/base.html
+	modified:   templates/cart.html
+	modified:   templates/order_detail.html
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	deploy_dryrun.txt
+	deploy_full.txt
+
+no changes added to commit (use "git add" and/or "git commit -a")
+
+Γ£à Success: Check git status
+
+============================================================
+≡ƒôî Stage all changes
+============================================================
+$ git add -A
+
+Γ£à Success: Stage all changes
+
+============================================================
+≡ƒôî Commit changes
+============================================================
+$ git commit -m "chore: Prepare for Vercel deployment" || true
+
+--- stdout ---
+[main 7b8185f] chore: Prepare for Vercel deployment
+ 8 files changed, 122 insertions(+), 77 deletions(-)
+ create mode 100644 deploy_dryrun.txt
+ create mode 100644 deploy_full.txt
+
+Γ£à Success: Commit changes
+
+============================================================
+≡ƒôî Push current branch to GitHub
+============================================================
+$ git push origin main
+
+--- stderr ---
+To https://github.com/cyberworld360/cyberworld-store.git
+   1a86234..7b8185f  main -> main
+
+Γ£à Success: Push current branch to GitHub
+
+≡ƒöÉ Vercel authentication...
+Please login to Vercel (if not already logged in):
+
+============================================================
+≡ƒôî Login to Vercel
+============================================================
+$ vercel.cmd login
+
+--- stdout ---
+
+  Visit https://vercel.com/oauth/device?user_code=RVQK-RRJZ
+  Press [ENTER] to open the browser
+
+--- stderr ---
+Vercel CLI 48.12.0
+Waiting for authentication...
+[2K[1A[2K[GWaiting for authentication...
+Error: request to https://api.vercel.com/login/oauth/token failed, reason: read ECONNRESET
+
+
+Γ¥î Failed: Login to Vercel (exit 1)
+
+≡ƒÜÇ Deploying to Vercel...
+
+============================================================
+≡ƒôî Deploy to Vercel
+============================================================
+$ vercel.cmd --prod --confirm --env SECRET_KEY=cyberworld_super_secure_key_2024 --env ADMIN_USERNAME=CYBERJNR --env ADMIN_PASSWORD=GITG360 --env PAYSTACK_SECRET_KEY=sk_live_ba182349c726db1394b001f097983848984d51ee --env PAYSTACK_PUBLIC_KEY=pk_live_907a4a9059ed82e13af54f4610f85c2578de1beb --env PAYSTACK_CALLBACK_URL=https://cyberworld-store-86kt.vercel.app/paystack/callback --env DATABASE_URL=postgres://political-tan-viper:zgkuaascugxv@wandering-maroon-partridge-ieisx-postgresql.wandering-maroon-partridge-ieisx.svc.cluster.local:5432/wandering-maroon-partridge --env MAIL_SERVER=smtp.gmail.com --env MAIL_PORT=465 --env MAIL_USERNAME=cyberworldstore360@gmail.com --env MAIL_PASSWORD=zjetrsduxubgkpuj --env MAIL_USE_TLS=false --env MAIL_USE_SSL=true --env MAIL_DEFAULT_SENDER=CYBER WORLD STORE <cyberworldstore360@gmail.com> --env ADMIN_EMAIL=cyberworldstore360@gmail.com
+
+--- stdout ---
+https://cyberworld-store-or74fszde-cyberworldstores-projects.vercel.app
+--- stderr ---
+Vercel CLI 48.12.0
+WARN! `--confirm` is deprecated, please use `--yes` instead
+Retrieving project├óΓé¼┬ª
+Deploying cyberworldstores-projects/cyberworld-store
+Uploading [--------------------] (0.0B/52KB)
+Uploading [=======-------------] (20.1KB/52KB)
+Uploading [===========---------] (29.2KB/52KB)
+Uploading [==================--] (47.1KB/52KB)
+Uploading [====================] (52.0KB/52KB)
+Inspect: https://vercel.com/cyberworldstores-projects/cyberworld-store/DHHAPiAeDzKiCuepoBxCLjnLwmN3 [28s]
+Production: https://cyberworld-store-or74fszde-cyberworldstores-projects.vercel.app [28s]
+Building...
+Building...
+Building: Running build in Washington, D.C., USA (East) ├óΓé¼ΓÇ£ iad1
+Building: Build machine configuration: 2 cores, 8 GB
+Building: Retrieving list of deployment files...
+Building: Previous build caches not available.
+Building: Downloading 327 deployment files...
+Building: Running "vercel build"
+Building: Vercel CLI 48.12.0
+Building: No Python version specified in pyproject.toml or Pipfile.lock. Using latest installed version: 3.12
+Building: Installing required dependencies from requirements.txt...
+Building: Using uv at "/usr/local/bin/uv"
+Building: Build Completed in /vercel/output [2s]
+Building: Deploying outputs...
+Building: Deployment completed
+Building: Creating build cache...
+Building: Skipping cache upload because no files were prepared
+[2K[1A[2K[GProduction: https://cyberworld-store-or74fszde-cyberworldstores-projects.vercel.app [50s]
+Completing...
+
+Γ£à Success: Deploy to Vercel
+
+≡ƒôì Retrieving deployment info...
+
+============================================================
+≡ƒôî List recent deployments
+============================================================
+$ vercel.cmd ls --limit 5
+
+--- stderr ---
+Vercel CLI 48.12.0
+Error: unknown or unexpected option: --limit
+
+
+Γ¥î Failed: List recent deployments (exit 1)
+
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ             Γ£à Deployment Complete!                      Γòæ
+Γòæ                                                          Γòæ
+Γòæ  Next steps:                                             Γòæ
+Γòæ  1. Visit: https://vercel.com/dashboard                 Γòæ
+Γòæ  2. Configure GitHub Secrets for:                       Γòæ
+Γòæ     - VERCEL_TOKEN                                      Γòæ
+Γòæ     - VERCEL_ORG_ID                                     Γòæ
+Γòæ     - VERCEL_PROJECT_ID                                 Γòæ
+Γòæ  3. Test your live app:                                 Γòæ
+Γòæ     - Check email delivery                              Γòæ
+Γòæ     - Test Paystack payments                            Γòæ
+Γòæ     - Test wallet transactions                          Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+    
