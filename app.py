@@ -680,31 +680,66 @@ class Product(db.Model):
     card_size = db.Column(db.String(20), default='medium')
     created_at = db.Column(db.DateTime, default=utc_now)
 
+    def __repr__(self):
+        return f"<Product id={self.id} title='{self.title}' price={self.price_ghc}>"
+
+    def validate(self):
+        """Validate product data integrity"""
+        errors = []
+        if not self.title or not self.title.strip():
+            errors.append("Product title is required")
+        if self.card_size not in ('small', 'medium', 'large'):
+            self.card_size = 'medium'
+        try:
+            Decimal(str(self.price_ghc))
+        except:
+            errors.append("Invalid price_ghc format")
+        if self.old_price_ghc:
+            try:
+                Decimal(str(self.old_price_ghc))
+            except:
+                errors.append("Invalid old_price_ghc format")
+        return errors
+
     def to_dict(self):
+        """Convert product to dictionary for API responses"""
         return {
             "id": self.id,
             "title": self.title,
             "short": self.short,
-            "price_ghc": float(self.price_ghc),
+            "price_ghc": float(self.price_ghc or 0),
             "old_price_ghc": float(self.old_price_ghc or 0),
             "image": self.image,
             "featured": self.featured,
+            "card_size": self.card_size,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
         }
+
+    def get_image_url(self):
+        """Get product image URL with fallback"""
+        if self.product_image_data:
+            return f'/image/product/{self.id}'
+        return self.image or ''
 
 class AdminUser(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(200), nullable=False)
 
+    def __repr__(self):
+        return f"<AdminUser id={self.id} username='{self.username}'>"
+
     def set_password(self, raw):
         self.password_hash = generate_password_hash(raw)
 
     def check_password(self, raw):
         return check_password_hash(self.password_hash, raw)
+    
     @property
     def is_admin(self):
         """Explicit admin indicator for permission checks."""
         return True
+    
     def get_id(self):
         # Prefix with class name so Flask-Login user IDs don't collide across tables
         return f"AdminUser:{self.id}"
@@ -716,21 +751,36 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(200), nullable=False)
     wallet = db.relationship('Wallet', uselist=False, backref='user', cascade='all, delete-orphan')
 
+    def __repr__(self):
+        return f"<User id={self.id} email='{self.email}'>"
+
     def __init__(self, email=None, **kwargs):
         super().__init__(**kwargs)
         self.email = email
 
     def set_password(self, raw):
+        if not raw or len(raw) < 6:
+            raise ValueError("Password must be at least 6 characters")
         self.password_hash = generate_password_hash(raw)
 
     def check_password(self, raw):
+        if not raw or not self.password_hash:
+            return False
         return check_password_hash(self.password_hash, raw)
+    
     @property
     def is_admin(self):
         """Non-admin customer user."""
         return False
+    
     def get_id(self):
         return f"User:{self.id}"
+
+    def validate_email(self):
+        """Basic email validation"""
+        if not self.email or '@' not in self.email:
+            raise ValueError("Invalid email format")
+        return True
 
 class Wallet(db.Model):
     """User wallet for storing balance"""
@@ -739,6 +789,45 @@ class Wallet(db.Model):
     balance = db.Column(db.Numeric(10, 2), default=0.0, nullable=False)
     created_at = db.Column(db.DateTime, default=utc_now)
     updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now)
+
+    def __repr__(self):
+        return f"<Wallet user_id={self.user_id} balance={self.balance}>"
+
+    def add_balance(self, amount):
+        """Add amount to wallet balance with validation"""
+        try:
+            amount_decimal = Decimal(str(amount))
+            if amount_decimal < 0:
+                raise ValueError("Cannot add negative amount")
+            self.balance = Decimal(str(self.balance or 0)) + amount_decimal
+            self.updated_at = utc_now()
+            return True
+        except Exception as e:
+            app.logger.error(f"Wallet.add_balance error: {e}")
+            return False
+
+    def deduct_balance(self, amount):
+        """Deduct amount from wallet balance with validation"""
+        try:
+            amount_decimal = Decimal(str(amount))
+            current = Decimal(str(self.balance or 0))
+            if amount_decimal < 0:
+                raise ValueError("Cannot deduct negative amount")
+            if current < amount_decimal:
+                return False  # Insufficient balance
+            self.balance = current - amount_decimal
+            self.updated_at = utc_now()
+            return True
+        except Exception as e:
+            app.logger.error(f"Wallet.deduct_balance error: {e}")
+            return False
+
+    def get_balance(self):
+        """Get wallet balance as Decimal"""
+        try:
+            return Decimal(str(self.balance or 0))
+        except:
+            return Decimal('0')
 
 
 class Order(db.Model):
@@ -759,6 +848,47 @@ class Order(db.Model):
     paid = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=utc_now)
 
+    def __repr__(self):
+        return f"<Order id={self.id} ref='{self.reference}' status='{self.status}' total={self.total}>"
+
+    def validate(self):
+        """Validate order data integrity"""
+        errors = []
+        if not self.reference:
+            errors.append("Order reference is required")
+        if not self.email or '@' not in self.email:
+            errors.append("Valid email is required")
+        try:
+            total_dec = Decimal(str(self.total or 0))
+            if total_dec < 0:
+                errors.append("Order total cannot be negative")
+        except:
+            errors.append("Invalid total amount")
+        if self.status not in ('pending', 'completed', 'cancelled'):
+            self.status = 'pending'
+        return errors
+
+    def get_total(self):
+        """Get order total as Decimal"""
+        try:
+            return Decimal(str(self.total or 0))
+        except:
+            return Decimal('0')
+
+    def to_dict(self):
+        """Convert order to dictionary for API responses"""
+        return {
+            "id": self.id,
+            "reference": self.reference,
+            "email": self.email,
+            "name": self.name,
+            "total": float(self.total or 0),
+            "status": self.status,
+            "payment_method": self.payment_method,
+            "paid": self.paid,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
 
 class OrderItem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -769,6 +899,97 @@ class OrderItem(db.Model):
     price = db.Column(db.Numeric(12,2), nullable=False, default=0)
     subtotal = db.Column(db.Numeric(12,2), nullable=False, default=0)
     product = db.relationship('Product', primaryjoin='Product.id==OrderItem.product_id', foreign_keys=[product_id], uselist=False)
+
+    def __repr__(self):
+        return f"<OrderItem order_id={self.order_id} product_id={self.product_id} qty={self.qty} subtotal={self.subtotal}>"
+
+    def validate(self):
+        """Validate order item data integrity"""
+        errors = []
+        if self.qty < 1:
+            errors.append("Quantity must be at least 1")
+        try:
+            price_dec = Decimal(str(self.price or 0))
+            subtotal_dec = Decimal(str(self.subtotal or 0))
+            if price_dec < 0 or subtotal_dec < 0:
+                errors.append("Price and subtotal cannot be negative")
+        except:
+            errors.append("Invalid price or subtotal format")
+        return errors
+
+    def get_subtotal(self):
+        """Get item subtotal as Decimal"""
+        try:
+            return Decimal(str(self.subtotal or 0))
+        except:
+            return Decimal('0')
+
+
+class Coupon(db.Model):
+    """Discount coupons for customers"""
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(50), unique=True, nullable=False, index=True)
+    discount_type = db.Column(db.String(20), default='percent')  # 'percent' or 'fixed'
+    discount_value = db.Column(db.Numeric(10, 2), nullable=False)
+    max_uses = db.Column(db.Integer, default=None)  # None = unlimited
+    current_uses = db.Column(db.Integer, default=0)
+    min_amount = db.Column(db.Numeric(10, 2), default=0)  # Minimum order amount
+    max_discount = db.Column(db.Numeric(10, 2), default=None)  # Max discount cap for percent
+    expiry_date = db.Column(db.DateTime, default=None)  # None = no expiry
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=utc_now)
+
+    def __repr__(self):
+        return f"<Coupon code='{self.code}' type='{self.discount_type}' active={self.is_active}>"
+
+    def is_valid(self):
+        """Check if coupon is still valid"""
+        if not self.is_active:
+            return False, "Coupon is inactive"
+        if self.max_uses and self.current_uses >= self.max_uses:
+            return False, "Coupon usage limit reached"
+        # Compare expiry dates safely (handle both naive and aware datetimes)
+        if self.expiry_date:
+            now = utc_now()
+            expiry = self.expiry_date
+            # If expiry is naive, make it aware in UTC
+            if expiry.tzinfo is None:
+                from datetime import timezone as dt_timezone
+                expiry = expiry.replace(tzinfo=dt_timezone.utc)
+            if now > expiry:
+                return False, "Coupon has expired"
+        return True, "Valid"
+    
+    def calculate_discount(self, amount):
+        """Calculate discount amount with validation"""
+        try:
+            amount = Decimal(str(amount))
+            if amount < 0:
+                return Decimal('0')
+            
+            if self.discount_type == 'percent':
+                discount_value = Decimal(str(self.discount_value or 0))
+                if discount_value < 0 or discount_value > 100:
+                    return Decimal('0')
+                discount = (amount * discount_value) / Decimal('100')
+                if self.max_discount:
+                    discount = min(discount, Decimal(str(self.max_discount)))
+            else:  # fixed
+                discount = Decimal(str(self.discount_value or 0))
+            
+            return min(discount, amount)
+        except Exception as e:
+            app.logger.error(f"Coupon.calculate_discount error: {e}")
+            return Decimal('0')
+
+    def apply_usage(self):
+        """Increment coupon usage count"""
+        try:
+            self.current_uses = (self.current_uses or 0) + 1
+            return True
+        except Exception as e:
+            app.logger.error(f"Coupon.apply_usage error: {e}")
+            return False
 
 
 class OrderLog(db.Model):
@@ -882,11 +1103,26 @@ class Settings(db.Model):
     # Logo size and position controls
     updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now)
 
+    def __repr__(self):
+        return f"<Settings id={self.id} primary_color='{self.primary_color}'>"
+
+    def validate(self):
+        """Validate settings data"""
+        errors = []
+        if self.dashboard_layout not in ('grid', 'list'):
+            self.dashboard_layout = 'grid'
+        # Validate hex colors (basic check)
+        for color_attr in ['primary_color', 'secondary_color']:
+            color_val = getattr(self, color_attr, '')
+            if color_val and not color_val.startswith('#'):
+                setattr(self, color_attr, '#2c3e50')  # default fallback
+        return errors
+
     def get_logo_url(self):
         """Get logo URL: return /image/logo if data stored in DB, else return logo_image path"""
         if self.logo_image_data:
             return '/image/logo'
-        return self.logo_image
+        return self.logo_image or '/static/images/logo.svg'
 
     def get_banner1_url(self):
         """Get banner 1 URL: return /image/banner1 if data stored in DB, else return banner1_image path"""
@@ -1096,7 +1332,78 @@ def upload_to_s3(file_obj, key, mime_type=None):
             app.logger.warning('S3 upload failed: %s', e)
         except Exception:
             pass
-        return None
+
+
+# ============================================================================
+# Helper Functions for Data Validation, Type Conversion, and Formatting
+# ============================================================================
+
+def safe_decimal(value, default=Decimal('0')):
+    """Safely convert value to Decimal with fallback to default"""
+    try:
+        if value is None:
+            return default
+        return Decimal(str(value))
+    except Exception as e:
+        app.logger.debug(f"safe_decimal({value}) failed: {e}")
+        return default
+
+
+def safe_int(value, default=0):
+    """Safely convert value to int with fallback to default"""
+    try:
+        if value is None:
+            return default
+        return int(value)
+    except Exception as e:
+        app.logger.debug(f"safe_int({value}) failed: {e}")
+        return default
+
+
+def format_price(amount, currency='GH₵'):
+    """Format price for display"""
+    try:
+        d = safe_decimal(amount)
+        return f"{currency}{d:.2f}"
+    except Exception as e:
+        app.logger.error(f"format_price({amount}) failed: {e}")
+        return f"{currency}0.00"
+
+
+def validate_product_data(title, price_str):
+    """Validate product data before creating/updating"""
+    errors = []
+    if not title or not title.strip():
+        errors.append("Product title is required")
+    try:
+        price = Decimal(price_str)
+        if price < 0:
+            errors.append("Product price cannot be negative")
+    except:
+        errors.append("Invalid price format")
+    return errors
+
+
+def validate_order_total(cart_items):
+    """Validate and calculate order total from cart items"""
+    try:
+        total = Decimal('0')
+        for item in cart_items:
+            price = safe_decimal(item.get('price', 0))
+            qty = safe_int(item.get('qty', 1), 1)
+            total += price * qty
+        return total, None
+    except Exception as e:
+        return None, str(e)
+
+
+def is_valid_email(email):
+    """Basic email validation"""
+    if not email or not isinstance(email, str):
+        return False
+    email = email.strip()
+    return '@' in email and '.' in email.split('@')[-1]
+
 
 def get_settings():
     """Get site settings, create defaults if not exist"""
@@ -1765,163 +2072,252 @@ def api_products():
 
 # --- Cart (session-based) ---
 def _cart():
+    """Get or initialize shopping cart in session"""
     return session.setdefault("cart", {})
+
+def _validate_cart_item(pid, qty):
+    """Validate a cart item (product ID and quantity)"""
+    try:
+        pid = safe_int(pid, 0)
+        qty = safe_int(qty, 1)
+        if pid < 1 or qty < 1:
+            return None, "Invalid product or quantity"
+        return pid, qty
+    except Exception as e:
+        return None, str(e)
 
 @app.route("/cart")
 def view_cart():
+    """Display shopping cart with all items"""
     cart = _cart()
     items = []
     total = Decimal("0")
-    for pid_str, qty in cart.items():
+    
+    # Validate and load each cart item
+    for pid_str, qty in list(cart.items()):
         try:
-            pid = int(pid_str); qty = int(qty)
+            pid, validated_qty = _validate_cart_item(pid_str, qty)
+            if not pid:
+                # Remove invalid items from cart
+                cart.pop(pid_str, None)
+                continue
+            
+            qty = validated_qty
         except Exception:
+            cart.pop(pid_str, None)
             continue
+        
         try:
             p = db.session.get(Product, pid)
             if not p:
                 # Fallback to raw SQL
                 row = db.session.execute("SELECT id, title, short, price_ghc, old_price_ghc, image, featured, card_size FROM product WHERE id = :id", {'id': pid}).fetchone()
                 if not row:
+                    cart.pop(pid_str, None)
                     continue
                 from types import SimpleNamespace
                 p = SimpleNamespace(id=row[0], title=row[1], short=row[2], price_ghc=row[3], old_price_ghc=row[4], image=row[5], featured=bool(row[6]), card_size=row[7], created_at=None)
-        except Exception:
+        except Exception as e:
+            app.logger.error(f"Error loading product {pid} in view_cart: {e}")
+            cart.pop(pid_str, None)
             continue
-        subtotal = Decimal(p.price_ghc) * qty
-        items.append({"product": p, "qty": qty, "subtotal": subtotal})
-        total += subtotal
+        
+        try:
+            price_decimal = safe_decimal(p.price_ghc, Decimal('0'))
+            subtotal = price_decimal * qty
+            items.append({"product": p, "qty": qty, "subtotal": subtotal})
+            total += subtotal
+        except Exception as e:
+            app.logger.error(f"Error calculating subtotal for product {pid}: {e}")
+            continue
+    
+    session.modified = True
     return render_template("cart.html", items=items, total=total)
-
-
 
 
 @app.route("/cart/add/<int:pid>", methods=["POST"])
 def cart_add(pid):
+    """Add product to shopping cart"""
     try:
-        qty = int(request.form.get("qty", 1))
-    except Exception:
-        qty = 1
-    if qty < 1:
-        qty = 1
-    p = Product.query.get_or_404(pid)
-    cart = _cart()
-    cart[str(pid)] = cart.get(str(pid), 0) + qty
-    session.modified = True
-    flash(f"Added {qty} × {p.title} to cart.", "success")
-    return redirect(request.referrer or url_for("index"))
+        qty = safe_int(request.form.get("qty", 1), 1)
+        if qty < 1:
+            qty = 1
+        
+        # Validate product exists
+        p = Product.query.get_or_404(pid)
+        
+        # Add to cart
+        cart = _cart()
+        current_qty = safe_int(cart.get(str(pid), 0), 0)
+        cart[str(pid)] = current_qty + qty
+        session.modified = True
+        
+        flash(f"✓ Added {qty} × {p.title} to cart.", "success")
+        return redirect(request.referrer or url_for("index"))
+    except Exception as e:
+        app.logger.error(f"Error in cart_add({pid}): {e}")
+        flash("Error adding item to cart.", "danger")
+        return redirect(request.referrer or url_for("index"))
 
 @app.route("/cart/update", methods=["POST"])
 def cart_update():
-    cart = _cart()
-    for key, val in request.form.items():
-        if not key.startswith("qty_"): continue
-        pid = key.split("_", 1)[1]
-        try:
-            qty = int(val)
-        except Exception:
-            continue
-        if qty <= 0:
-            cart.pop(pid, None)
-        else:
-            cart[pid] = qty
-    session.modified = True
-    flash("Cart updated.", "info")
-    return redirect(url_for("view_cart"))
+    """Update quantities in shopping cart"""
+    try:
+        cart = _cart()
+        updated = False
+        
+        for key, val in request.form.items():
+            if not key.startswith("qty_"):
+                continue
+            
+            pid = key.split("_", 1)[1]
+            try:
+                qty = safe_int(val, 0)
+                if qty <= 0:
+                    if pid in cart:
+                        cart.pop(pid)
+                        updated = True
+                else:
+                    cart[pid] = qty
+                    updated = True
+            except Exception as e:
+                app.logger.debug(f"Error updating quantity for product {pid}: {e}")
+                continue
+        
+        if updated:
+            session.modified = True
+            flash("✓ Cart updated.", "info")
+        
+        return redirect(url_for("view_cart"))
+    except Exception as e:
+        app.logger.error(f"Error in cart_update: {e}")
+        flash("Error updating cart.", "danger")
+        return redirect(url_for("view_cart"))
 
 @app.route("/cart/clear")
 def cart_clear():
-    session.pop("cart", None)
-    flash("Cart cleared.", "info")
+    """Clear entire shopping cart"""
+    try:
+        session.pop("cart", None)
+        session.modified = True
+        flash("✓ Cart cleared.", "info")
+    except Exception as e:
+        app.logger.error(f"Error in cart_clear: {e}")
+        flash("Error clearing cart.", "danger")
     return redirect(url_for("index"))
 
 # --- Paystack integration ---
 @app.route("/pay/paystack", methods=["POST"])
 def paystack_init():
-    cart = _cart()
-    if not cart:
-        flash("Cart is empty.", "warning")
-        return redirect(url_for("index"))
-
-    total = Decimal("0")
-    items = []
-    for pid_str, qty in cart.items():
-        pid = int(pid_str); qty = int(qty)
-        p = db.session.get(Product, pid)
-        if not p: continue
-        subtotal = Decimal(p.price_ghc) * qty
-        total += subtotal
-        items.append({"product": p.title, "product_id": p.id, "qty": qty, "subtotal": float(subtotal)})
-
-    email = request.form.get("email") or "customer@example.com"
-    name = request.form.get("name", "").strip()
-    phone = request.form.get("phone", "").strip()
-    city = request.form.get("city", "").strip()
-    coupon_id = request.form.get("coupon_id", "").strip()
-    
-    # Calculate discount if coupon applied (validate properly)
-    discount = Decimal('0')
-    applied_coupon = None
-    if coupon_id:
-        try:
-            coupon = db.session.get(Coupon, int(coupon_id))
-            if coupon:
-                valid, msg = coupon.is_valid()
-                if valid:
-                    if total >= Decimal(str(coupon.min_amount)):
-                        discount = coupon.calculate_discount(total)
-                        applied_coupon = coupon
-                    else:
-                        flash(f"Coupon requires minimum order of GH₵{coupon.min_amount}", "warning")
-                        return redirect(url_for('checkout'))
-                else:
-                    flash(f"Coupon invalid: {msg}", "warning")
-                    return redirect(url_for('checkout'))
-        except Exception:
-            pass
-
-    final_total = max(total - discount, Decimal('0'))
-    
-    # For demo convert GHS to minor units by *100 (NOT real NGN conversion). Adjust in production.
-    amount_minor = int(float(final_total) * 100)
-
-    initialize_url = "https://api.paystack.co/transaction/initialize"
-    headers = {"Authorization": f"Bearer {PAYSTACK_SECRET}", "Content-Type": "application/json"}
-    callback_url = PAYSTACK_CALLBACK or url_for('paystack_callback', _external=True)
-    reference = str(uuid.uuid4())
-    payload = {
-        "email": email,
-        "amount": amount_minor,
-        "reference": reference,
-        "callback_url": callback_url,
-        "metadata": {
-            "cart": items,
-            "name": name,
-            "phone": phone,
-            "city": city,
-            "discount_amount": str(discount),
-            "coupon_applied": coupon_id if coupon_id else "none"
-        }
-    }
-
-    if not PAYSTACK_SECRET:
-        flash("Paystack secret key not configured. Set PAYSTACK_SECRET_KEY in .env.", "danger")
-        return redirect(url_for("checkout"))
-
+    """Initialize Paystack payment"""
     try:
-        r = requests.post(initialize_url, json=payload, headers=headers, timeout=15)
-        r.raise_for_status()
-        data = r.json()
-        if data.get("status") and data.get("data") and data["data"].get("authorization_url"):
-            # store pending payment info (email and items) to verify after redirect
-            session["pending_payment"] = {"reference": reference, "amount": amount_minor, "email": email, "items": items, "coupon_id": int(coupon_id) if coupon_id else None, "discount": str(discount)}
-            session.modified = True
-            return redirect(data["data"]["authorization_url"])
-        else:
-            flash("Failed to initialize Paystack payment: " + str(data.get("message", "unknown")), "danger")
+        cart = _cart()
+        if not cart:
+            flash("Cart is empty.", "warning")
+            return redirect(url_for("index"))
+
+        total = Decimal("0")
+        items = []
+        
+        for pid_str, qty in cart.items():
+            try:
+                pid, validated_qty = _validate_cart_item(pid_str, qty)
+                if not pid:
+                    continue
+                qty = validated_qty
+            except Exception:
+                continue
+            
+            try:
+                p = db.session.get(Product, pid)
+                if not p:
+                    continue
+                
+                price = safe_decimal(p.price_ghc, Decimal('0'))
+                subtotal = price * qty
+                total += subtotal
+                items.append({"product": p.title, "product_id": p.id, "qty": qty, "subtotal": float(subtotal)})
+            except Exception as e:
+                app.logger.error(f"Error processing product {pid} for payment: {e}")
+                continue
+
+        if not items or total <= 0:
+            flash("Invalid cart state for payment.", "danger")
+            return redirect(url_for("view_cart"))
+
+        email = request.form.get("email", "").strip()
+        name = request.form.get("name", "").strip()
+        phone = request.form.get("phone", "").strip()
+        city = request.form.get("city", "").strip()
+        coupon_id = request.form.get("coupon_id", "").strip()
+        
+        # Calculate discount if coupon applied (validate properly)
+        discount = Decimal('0')
+        applied_coupon = None
+        if coupon_id:
+            try:
+                coupon = db.session.get(Coupon, int(coupon_id))
+                if coupon:
+                    valid, msg = coupon.is_valid()
+                    if valid:
+                        if total >= Decimal(str(coupon.min_amount)):
+                            discount = coupon.calculate_discount(total)
+                            applied_coupon = coupon
+                        else:
+                            flash(f"Coupon requires minimum order of GH₵{coupon.min_amount}", "warning")
+                            return redirect(url_for('checkout'))
+                    else:
+                        flash(f"Coupon invalid: {msg}", "warning")
+                        return redirect(url_for('checkout'))
+            except Exception:
+                pass
+
+        final_total = max(total - discount, Decimal('0'))
+        
+        # For demo convert GHS to minor units by *100 (NOT real NGN conversion). Adjust in production.
+        amount_minor = int(float(final_total) * 100)
+
+        initialize_url = "https://api.paystack.co/transaction/initialize"
+        headers = {"Authorization": f"Bearer {PAYSTACK_SECRET}", "Content-Type": "application/json"}
+        callback_url = PAYSTACK_CALLBACK or url_for('paystack_callback', _external=True)
+        reference = str(uuid.uuid4())
+        payload = {
+            "email": email,
+            "amount": amount_minor,
+            "reference": reference,
+            "callback_url": callback_url,
+            "metadata": {
+                "cart": items,
+                "name": name,
+                "phone": phone,
+                "city": city,
+                "discount_amount": str(discount),
+                "coupon_applied": coupon_id if coupon_id else "none"
+            }
+        }
+
+        if not PAYSTACK_SECRET:
+            flash("Paystack secret key not configured. Set PAYSTACK_SECRET_KEY in .env.", "danger")
+            return redirect(url_for("checkout"))
+
+        try:
+            r = requests.post(initialize_url, json=payload, headers=headers, timeout=15)
+            r.raise_for_status()
+            data = r.json()
+            if data.get("status") and data.get("data") and data["data"].get("authorization_url"):
+                # store pending payment info (email and items) to verify after redirect
+                session["pending_payment"] = {"reference": reference, "amount": amount_minor, "email": email, "items": items, "coupon_id": int(coupon_id) if coupon_id else None, "discount": str(discount)}
+                session.modified = True
+                return redirect(data["data"]["authorization_url"])
+            else:
+                flash("Failed to initialize Paystack payment: " + str(data.get("message", "unknown")), "danger")
+                return redirect(url_for("checkout"))
+        except Exception as e:
+            flash("Paystack initialization error: " + str(e), "danger")
             return redirect(url_for("checkout"))
     except Exception as e:
-        flash("Paystack initialization error: " + str(e), "danger")
+        app.logger.error(f"Error in paystack_init: {e}")
+        flash("Unexpected error during Paystack initialization.", "danger")
         return redirect(url_for("checkout"))
 
 
