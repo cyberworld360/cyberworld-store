@@ -104,12 +104,22 @@
   display: flex;
   flex-direction: column;
   gap: 5px;
-  transition: all 0.3s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
   z-index: 105;
+  width: 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
 }
 
 .mobile-menu-toggle:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.05);
+}
+
+.mobile-menu-toggle:active {
+  background: rgba(255, 255, 255, 0.15);
+  transform: scale(0.95);
 }
 
 .mobile-menu-toggle:focus {
@@ -119,11 +129,12 @@
 
 .hamburger-line {
   display: block;
-  width: 24px;
+  width: 20px;
   height: 2px;
   background: currentColor;
-  transition: all 0.3s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
   border-radius: 1px;
+  transform-origin: center;
 }
 
 /* Hamburger Animation - Open State */

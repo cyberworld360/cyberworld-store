@@ -3,7 +3,7 @@
 <div class="container">
   <div class="product-detail" style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin: 2rem 0;">
     <div>
-      <img src="{{ product.image or '/static/images/placeholder.png' }}" alt="{{ product.title }}" loading="lazy" style="width: 100%; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.1);" />
+      <img src="{{ product.image or '/static/images/placeholder.png' }}" alt="{{ product.title }}" loading="lazy" onerror="this.src='/static/images/placeholder.png'" style="width: 100%; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.1);" />
     </div>
     <div class="meta" style="display: flex; flex-direction: column; justify-content: flex-start;">
       <h2 style="margin-bottom: 0.5rem;">{{ product.title }}</h2>

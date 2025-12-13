@@ -87,7 +87,7 @@
     {% for p in featured %}
     <div class="card {% if p.is_latest %}card-latest{% endif %}">
       <div style="position: relative;">
-        <img loading="lazy" src="{{ p.image or settings.get_bg_url() }}" alt="{{ p.title }}" />
+        <img loading="lazy" src="{{ p.image or settings.get_bg_url() }}" alt="{{ p.title }}" onerror="this.src='{{ settings.get_bg_url() }}'" />
         {% if p.is_latest %}
         <span class="badge-latest">🆕 NEW</span>
         {% endif %}
@@ -107,7 +107,7 @@
     {% for p in products %}
     <div class="card card-{{ p.card_size or 'medium' }} {% if p.is_latest %}card-latest{% endif %}">
       <div style="position: relative;">
-        <img loading="lazy" src="{{ p.image or settings.get_bg_url() }}" alt="{{ p.title }}" />
+        <img loading="lazy" src="{{ p.image or settings.get_bg_url() }}" alt="{{ p.title }}" onerror="this.src='{{ settings.get_bg_url() }}'" />
         {% if p.is_latest %}
         <span class="badge-latest">🆕 NEW</span>
         {% endif %}
