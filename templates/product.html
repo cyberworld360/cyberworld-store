@@ -1,15 +1,45 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="product-detail">
-  <img src="{{ product.image or '/static/images/placeholder.png' }}" alt="{{ product.title }}" loading="lazy" />
-  <div class="meta">
-    <h2>{{ product.title }}</h2>
-    <p>{{ product.short }}</p>
-    <p class="price">{{ product.price_ghc|money }}</p>
-    <form action="/cart/add/{{ product.id }}" method="post" aria-label="Add {{ product.title }} to cart">
-      <label>Qty <input type="number" name="qty" value="1" min="1" /></label>
-      <button class="btn" type="submit">Add to cart</button>
-    </form>
+<div class="container">
+  <div class="product-detail" style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin: 2rem 0;">
+    <div>
+      <img src="{{ product.image or '/static/images/placeholder.png' }}" alt="{{ product.title }}" loading="lazy" style="width: 100%; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.1);" />
+    </div>
+    <div class="meta" style="display: flex; flex-direction: column; justify-content: flex-start;">
+      <h2 style="margin-bottom: 0.5rem;">{{ product.title }}</h2>
+      <p style="color: #666; margin-bottom: 1rem; font-size: 1rem;">{{ product.short }}</p>
+      
+      <div style="padding: 1.5rem; background: #f5f7fa; border-radius: 12px; margin: 1.5rem 0;">
+        <p style="color: #999; font-size: 0.9rem; margin: 0 0 0.5rem 0;">CURRENT PRICE</p>
+        <p class="price" style="margin: 0; font-size: 2rem; color: var(--primary-color);">{{ product.price_ghc|money }}</p>
+        {% if product.old_price_ghc and product.old_price_ghc > product.price_ghc %}
+        <p style="color: #999; text-decoration: line-through; margin: 0.5rem 0 0 0;">Was {{ product.old_price_ghc|money }}</p>
+        {% endif %}
+      </div>
+      
+      {% if product.featured %}
+      <div style="background: #fff7e6; border-left: 4px solid #faad14; padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
+        <p style="color: #d48806; margin: 0; font-weight: 600;">⭐ Featured Product</p>
+      </div>
+      {% endif %}
+      
+      <form action="/cart/add/{{ product.id }}" method="post" aria-label="Add {{ product.title }} to cart" style="display: flex; gap: 1rem; align-items: flex-end;">
+        <div class="form-group" style="margin-bottom: 0;">
+          <label for="qty" style="font-weight: 600;">📦 Quantity</label>
+          <input id="qty" type="number" name="qty" value="1" min="1" style="width: 100px;" />
+        </div>
+        <button class="btn btn-primary" type="submit" style="flex: 1;">🛒 Add to Cart</button>
+      </form>
+      
+      <a href="/" class="btn btn-outline" style="margin-top: 1rem; text-align: center;">← Back to Products</a>
+    </div>
   </div>
 </div>
+<style>
+  @media (max-width: 768px) {
+    .product-detail {
+      grid-template-columns: 1fr !important;
+    }
+  }
+</style>
 {% endblock %}

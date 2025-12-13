@@ -1,9 +1,19 @@
 {% extends 'base.html' %}
 {% block content %}
-<h2>Admin login</h2>
-<form method="post">
-  <label>Username<input name="username" required /></label>
-  <label>Password<input type="password" name="password" required /></label>
-  <button class="btn" type="submit">Login</button>
-</form>
+<div class="auth-container">
+  <div class="auth-form">
+    <h2>🛡️ Admin Login</h2>
+    <form method="post">
+      <div class="form-group">
+        <label for="username">👤 Username</label>
+        <input id="username" type="text" name="username" required placeholder="admin" />
+      </div>
+      <div class="form-group">
+        <label for="password">🔑 Password</label>
+        <input id="password" type="password" name="password" required placeholder="••••••••" />
+      </div>
+      <button class="btn btn-primary" type="submit">Secure Login</button>
+    </form>
+  </div>
+</div>
 {% endblock %}

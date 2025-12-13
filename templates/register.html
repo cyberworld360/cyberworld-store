@@ -2,23 +2,22 @@
 {% block content %}
 <div class="auth-container">
   <div class="auth-form">
-    <h2>Customer Registration</h2>
+    <h2>👤 Create Your Account</h2>
     <form method="post">
       <div class="form-group">
-        <label for="email">Email Address</label>
-        <input type="email" id="email" name="email" required placeholder="your@email.com" />
+            <label for="email">📧 Email Address</label>
+            <input type="email" id="email" name="email" required placeholder="you@example.com" />
       </div>
       <div class="form-group">
-        <label for="password">Password</label>
+            <label for="password">🔑 Password</label>
         <input type="password" id="password" name="password" required placeholder="••••••••" />
       </div>
       <div class="form-group">
-        <label for="confirm_password">Confirm Password</label>
+            <label for="confirm_password">🔑 Confirm Password</label>
         <input type="password" id="confirm_password" name="confirm_password" required placeholder="••••••••" />
       </div>
-      <button class="btn" type="submit">Register</button>
+          <button class="btn btn-primary" type="submit">Create Account</button>
     </form>
-    <p>Already have an account? <a href="/login">Login here</a></p>
   </div>
 </div>
 

@@ -1,27 +1,56 @@
 {% extends 'base.html' %}
 {% block content %}
-<h2>Your cart</h2>
-{% if items %}
-<form action="/cart/update" method="post">
-  <table class="cart-table">
-    <thead><tr><th>Product</th><th>Price</th><th>Qty</th><th>Subtotal</th></tr></thead>
-    <tbody>
-      {% for it in items %}
-      <tr>
-        <td>{{ it.product.title }}</td>
-        <td>{{ it.product.price_ghc|money }}</td>
-        <td><label for="qty_{{ it.product.id }}">Qty:</label><input id="qty_{{ it.product.id }}" type="number" name="qty_{{ it.product.id }}" value="{{ it.qty }}" min="0" /></td>
-        <td>{{ it.subtotal|money }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  <p class="total">Total: {{ total|money }}</p>
-  <button class="btn" type="submit">Update cart</button>
-  <a class="btn-outline" href="/checkout">Proceed to checkout</a>
-</form>
-<a class="btn-danger" href="/cart/clear">Clear cart</a>
-{% else %}
-<p>Your cart is empty.</p>
-{% endif %}
+<div class="container">
+  <h2>🛒 Shopping Cart</h2>
+  
+  {% if items %}
+  <form action="/cart/update" method="post">
+    <div class="cart-info">
+      <p>📦 You have <strong>{{ items|length }}</strong> item{{ "s" if items|length != 1 else "" }} in your cart</p>
+    </div>
+    
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Product</th>
+          <th style="text-align: right;">Price</th>
+          <th style="text-align: center;">Quantity</th>
+          <th style="text-align: right;">Subtotal</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for it in items %}
+        <tr>
+          <td><strong>{{ it.product.title }}</strong></td>
+          <td style="text-align: right;">{{ it.product.price_ghc|money }}</td>
+          <td style="text-align: center;">
+            <input id="qty_{{ it.product.id }}" type="number" name="qty_{{ it.product.id }}" value="{{ it.qty }}" min="0" style="width: 60px; text-align: center;" />
+          </td>
+          <td style="text-align: right;"><strong>{{ it.subtotal|money }}</strong></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    
+    <div class="cart-summary">
+      <div class="summary-row total">
+        <span>Total Amount:</span>
+        <span>{{ total|money }}</span>
+      </div>
+    </div>
+    
+    <div style="display: flex; gap: 1rem; margin-top: 2rem; flex-wrap: wrap;">
+      <button class="btn btn-primary" type="submit">💾 Update Cart</button>
+      <a class="btn btn-success" href="/checkout">✓ Proceed to Checkout</a>
+      <a class="btn btn-outline" href="/">← Continue Shopping</a>
+      <a class="btn btn-danger" href="/cart/clear" onclick="return confirm('Are you sure?')">🗑️ Clear Cart</a>
+    </div>
+  </form>
+  {% else %}
+  <div class="cart-info" style="text-align: center; padding: 3rem 1rem;">
+    <p style="font-size: 1.2rem; color: #666;">🛒 Your cart is empty</p>
+    <a class="btn btn-primary" href="/" style="margin-top: 1rem;">← Start Shopping</a>
+  </div>
+  {% endif %}
+</div>
 {% endblock %}
