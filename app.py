@@ -721,6 +721,20 @@ class Product(db.Model):
             return f'/image/product/{self.id}'
         return self.image or ''
 
+    def to_display_dict(self, currency='GHS'):
+        """Return UI-friendly product dict for templates"""
+        return {
+            "id": self.id,
+            "title": self.title,
+            "short": short_description(self.short or '', 140),
+            "price": format_price(self.price_ghc or 0, currency),
+            "old_price": format_price(self.old_price_ghc or 0, currency) if self.old_price_ghc else None,
+            "image_url": self.get_image_url(),
+            "featured": bool(self.featured),
+            "card_size": self.card_size,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
 class AdminUser(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
@@ -743,6 +757,13 @@ class AdminUser(UserMixin, db.Model):
     def get_id(self):
         # Prefix with class name so Flask-Login user IDs don't collide across tables
         return f"AdminUser:{self.id}"
+
+    def to_display_dict(self):
+        return {
+            "id": self.id,
+            "username": self.username,
+            "is_admin": True,
+        }
 
 class User(UserMixin, db.Model):
     """Customer user account for wallet and order history"""
@@ -781,6 +802,20 @@ class User(UserMixin, db.Model):
         if not self.email or '@' not in self.email:
             raise ValueError("Invalid email format")
         return True
+
+    def to_display_dict(self):
+        wallet_balance = None
+        try:
+            if self.wallet:
+                wallet_balance = format_price(self.wallet.get_balance(), 'GHS')
+        except Exception:
+            wallet_balance = format_price(0, 'GHS')
+        return {
+            "id": self.id,
+            "email": self.email,
+            "is_admin": False,
+            "wallet_balance": wallet_balance,
+        }
 
 class Wallet(db.Model):
     """User wallet for storing balance"""
@@ -828,6 +863,14 @@ class Wallet(db.Model):
             return Decimal(str(self.balance or 0))
         except:
             return Decimal('0')
+
+    def to_display_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "balance": format_price(self.get_balance(), 'GHS'),
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
 
 
 class Order(db.Model):
@@ -889,6 +932,19 @@ class Order(db.Model):
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
+    def to_display_dict(self, currency='GHS'):
+        return {
+            "id": self.id,
+            "reference": self.reference,
+            "email": self.email,
+            "name": self.name,
+            "total": format_price(self.get_total(), currency),
+            "status": self.status,
+            "payment_method": self.payment_method,
+            "paid": bool(self.paid),
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
 
 class OrderItem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -923,6 +979,17 @@ class OrderItem(db.Model):
             return Decimal(str(self.subtotal or 0))
         except:
             return Decimal('0')
+
+    def to_display_dict(self, currency='GHS'):
+        return {
+            "id": self.id,
+            "order_id": self.order_id,
+            "product_id": self.product_id,
+            "title": self.title,
+            "qty": int(self.qty),
+            "price": format_price(self.price or 0, currency),
+            "subtotal": format_price(self.get_subtotal(), currency),
+        }
 
 
 class Coupon(db.Model):
@@ -990,6 +1057,19 @@ class Coupon(db.Model):
         except Exception as e:
             app.logger.error(f"Coupon.apply_usage error: {e}")
             return False
+
+    def to_display_dict(self):
+        valid, msg = self.is_valid()
+        return {
+            "id": self.id,
+            "code": self.code,
+            "discount_type": self.discount_type,
+            "discount_value": str(self.discount_value),
+            "is_active": bool(self.is_active),
+            "valid": valid,
+            "valid_message": msg,
+            "expiry_date": self.expiry_date.isoformat() if self.expiry_date else None,
+        }
 
 
 class OrderLog(db.Model):
@@ -1098,6 +1178,19 @@ class Settings(db.Model):
             return '/image/bg'
         return self.bg_image
 
+    def to_display_dict(self):
+        return {
+            "id": self.id,
+            "logo_url": self.get_logo_url(),
+            "banner1_url": self.get_banner1_url(),
+            "banner2_url": self.get_banner2_url(),
+            "bg_url": self.get_bg_url(),
+            "primary_color": self.primary_color,
+            "secondary_color": self.secondary_color,
+            "primary_font": self.primary_font,
+            "dashboard_layout": self.dashboard_layout,
+        }
+
 
 class FailedEmail(db.Model):
     """Store failed email sends for later retry."""
@@ -1175,6 +1268,32 @@ def decode_image_from_base64(b64_data, mime_type='image/jpeg'):
     else:
         b64_str = b64_data
     return f"data:{mime_type};base64,{b64_str}"
+
+def format_price(amount, currency='GHS'):
+    """Format Decimal/number to human-friendly string with currency."""
+    try:
+        amt = Decimal(str(amount or 0))
+    except Exception:
+        amt = Decimal('0')
+    try:
+        # Use grouping and two decimals
+        return f"{amt:,.2f} {currency}"
+    except Exception:
+        return f"{str(amt)} {currency}"
+
+
+def short_description(text, length=140):
+    """Return a safely-truncated short description for UI cards."""
+    if not text:
+        return ''
+    s = str(text).strip()
+    if len(s) <= length:
+        return s
+    # Try to avoid chopping words
+    truncated = s[:length]
+    if ' ' in truncated:
+        truncated = truncated.rsplit(' ', 1)[0]
+    return truncated + '…'
 
 
 def _safe_db_rollback_and_close():
