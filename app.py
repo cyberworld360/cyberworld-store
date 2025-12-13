@@ -1663,12 +1663,47 @@ def inject_context():
     }
 
 
+def _ensure_product_created_at_column():
+    """Ensure the `created_at` column exists on the product table for older DBs.
+
+    This is a minimal, defensive fix used during debugging/local runs so template
+    rendering won't crash when migrations haven't been applied yet.
+    """
+    try:
+        engine = db.get_engine(app)
+        dialect = engine.dialect.name
+        if dialect == 'sqlite':
+            # Use sqlite PRAGMA to inspect columns
+            with engine.connect() as conn:
+                res = conn.execute("PRAGMA table_info('product');")
+                cols = [r[1] for r in res.fetchall()]
+                if 'created_at' not in cols:
+                    app.logger.info('Adding missing product.created_at column (sqlite)')
+                    try:
+                        conn.execute("ALTER TABLE product ADD COLUMN created_at DATETIME DEFAULT (CURRENT_TIMESTAMP);")
+                    except Exception:
+                        # If table doesn't exist, create_all as fallback
+                        app.logger.info('product table missing; running create_all()')
+                        with app.app_context():
+                            db.create_all()
+    except Exception as e:
+        app.logger.debug('Failed to ensure product.created_at column: %s', e)
+
+
 # --- Public pages ---
 @app.route("/")
 def index():
-    # Get all products sorted by latest first
-    prods = Product.query.order_by(Product.created_at.desc(), Product.id.desc()).all()
-    featured = Product.query.filter_by(featured=True).order_by(Product.created_at.desc()).all()
+    # Ensure DB has the expected schema (defensive for older DBs)
+    _ensure_product_created_at_column()
+
+    # Get all products sorted by latest first (fall back to id if ordering by created_at fails)
+    try:
+        prods = Product.query.order_by(Product.created_at.desc(), Product.id.desc()).all()
+        featured = Product.query.filter_by(featured=True).order_by(Product.created_at.desc()).all()
+    except Exception:
+        app.logger.exception('Ordering by created_at failed; falling back to id ordering')
+        prods = Product.query.order_by(Product.id.desc()).all()
+        featured = Product.query.filter_by(featured=True).order_by(Product.id.desc()).all()
     
     # Mark products created in the last 7 days as 'latest'
     from datetime import timedelta
@@ -1680,12 +1715,47 @@ def index():
 
 @app.route("/product/<int:pid>")
 def product_detail(pid):
-    p = Product.query.get_or_404(pid)
-    return render_template("product.html", product=p)
+    _ensure_product_created_at_column()
+    try:
+        p = Product.query.get_or_404(pid)
+        return render_template("product.html", product=p)
+    except Exception:
+        # Fallback to raw SQL if ORM fails due to schema mismatch
+        try:
+            row = db.session.execute(
+                "SELECT id, title, short, price_ghc, old_price_ghc, image, featured, card_size FROM product WHERE id = :id",
+                {'id': pid}
+            ).fetchone()
+            if not row:
+                abort(404)
+            from types import SimpleNamespace
+            p = SimpleNamespace(**{
+                'id': row[0], 'title': row[1], 'short': row[2], 'price_ghc': row[3],
+                'old_price_ghc': row[4], 'image': row[5], 'featured': bool(row[6]), 'card_size': row[7], 'created_at': None
+            })
+            return render_template("product.html", product=p)
+        except Exception:
+            app.logger.exception('Fallback raw SQL for product_detail failed')
+            abort(500)
 
 @app.route("/api/products")
 def api_products():
-    return jsonify([p.to_dict() for p in Product.query.all()])
+    _ensure_product_created_at_column()
+    try:
+        return jsonify([p.to_dict() for p in Product.query.all()])
+    except Exception:
+        # Fallback raw SQL
+        try:
+            rows = db.session.execute("SELECT id, title, short, price_ghc, old_price_ghc, image, featured FROM product").fetchall()
+            res = []
+            for r in rows:
+                res.append({
+                    'id': r[0], 'title': r[1], 'short': r[2], 'price_ghc': float(r[3] or 0), 'old_price_ghc': float(r[4] or 0), 'image': r[5], 'featured': bool(r[6])
+                })
+            return jsonify(res)
+        except Exception:
+            app.logger.exception('Fallback raw SQL for api_products failed')
+            return jsonify([]), 500
 
 # --- Cart (session-based) ---
 def _cart():
