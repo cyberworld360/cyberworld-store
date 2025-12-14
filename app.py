@@ -2171,9 +2171,85 @@ def _ensure_product_created_at_column():
         app.logger.debug('Failed to ensure product.created_at column: %s', e)
 
 
+# Auto-initialize database with base64-encoded images on Vercel (ephemeral DB).
+# This route is called once per deployment to seed images into the DB.
+@app.route("/__init_db__")
+def auto_init_db():
+    """Hidden endpoint to auto-seed database images on Vercel deployments (ephemeral DB).
+    This is safe to expose since it only adds images if Settings has no image data yet."""
+    try:
+        from pathlib import Path as _P
+        import base64 as _base64
+        static_dir = _P(__file__).parent / 'static' / 'images'
+        settings = Settings.query.first()
+        if not settings:
+            settings = Settings()
+            db.session.add(settings)
+        # Check if images are already seeded (if logo_image_data exists)
+        if not settings.logo_image_data:
+            # Load and seed all images
+            images = [
+                ('logo.svg', 'logo_image_data', 'logo_image_mime'),
+                ('ads1.svg', 'banner1_image_data', 'banner1_image_mime'),
+                ('ads2.svg', 'banner2_image_data', 'banner2_image_mime'),
+                ('product-bg.svg', 'bg_image_data', 'bg_image_mime'),
+            ]
+            for fname, data_attr, mime_attr in images:
+                fpath = static_dir / fname
+                if fpath.exists():
+                    try:
+                        raw = fpath.read_bytes()
+                        encoded = _base64.b64encode(raw)
+                        setattr(settings, data_attr, encoded)
+                        setattr(settings, mime_attr, 'image/svg+xml')
+                    except Exception:
+                        pass
+        db.session.commit()
+        return {'status': 'ok', 'message': 'Database initialized with images'}, 200
+    except Exception as e:
+        app.logger.exception('Auto-init failed: %s', e)
+        return {'status': 'error', 'message': str(e)}, 500
+
+
 # --- Public pages ---
 @app.route("/")
 def index():
+    # Auto-initialize database images on first request (idempotent, safe on ephemeral deployments)
+    try:
+        settings = Settings.query.first()
+        if not settings or not settings.logo_image_data:
+            from pathlib import Path as _P
+            import base64 as _base64
+            static_dir = _P(__file__).parent / 'static' / 'images'
+            if not settings:
+                settings = Settings()
+                db.session.add(settings)
+            images = [
+                ('logo.svg', 'logo_image_data', 'logo_image_mime'),
+                ('ads1.svg', 'banner1_image_data', 'banner1_image_mime'),
+                ('ads2.svg', 'banner2_image_data', 'banner2_image_mime'),
+                ('product-bg.svg', 'bg_image_data', 'bg_image_mime'),
+            ]
+            for fname, data_attr, mime_attr in images:
+                fpath = static_dir / fname
+                if fpath.exists():
+                    try:
+                        raw = fpath.read_bytes()
+                        encoded = _base64.b64encode(raw)
+                        setattr(settings, data_attr, encoded)
+                        setattr(settings, mime_attr, 'image/svg+xml')
+                    except Exception:
+                        pass
+            try:
+                db.session.commit()
+            except Exception:
+                try:
+                    db.session.rollback()
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
     # Try ORM first, fall back to raw SQL if schema mismatch
     try:
         prods = Product.query.order_by(Product.created_at.desc(), Product.id.desc()).all()
