@@ -72,8 +72,8 @@
 </style>
 
 <section class="ads-slider">
-  <div class="slide active"><img src="{{ settings.get_banner1_url() }}" alt="Ad 1" /></div>
-  <div class="slide"><img src="{{ settings.get_banner2_url() }}" alt="Ad 2" /></div>
+  <div class="slide active"><img src="{% if settings and settings.get_banner1_url() %}{{ settings.get_banner1_url() }}{% else %}/static/images/ads1.svg{% endif %}" alt="Ad 1" /></div>
+  <div class="slide"><img src="{% if settings and settings.get_banner2_url() %}{{ settings.get_banner2_url() }}{% else %}/static/images/ads2.svg{% endif %}" alt="Ad 2" /></div>
 </section>
 
 <section class="hero">
@@ -83,6 +83,7 @@
 
 <section class="featured">
   <h3>Featured Products</h3>
+  {% if featured %}
   <div class="featured-controls">
     <button class="featured-prev">◀</button>
     <button class="featured-next">▶</button>
@@ -91,7 +92,7 @@
     {% for p in featured %}
     <div class="card card-featured transition-all" role="listitem">
       <div style="position: relative; overflow: hidden; border-radius: 8px 8px 0 0;">
-        <img loading="lazy" src="{{ p.image or settings.get_bg_url() }}" alt="{{ p.title }}" onerror="this.src='{{ settings.get_bg_url() }}'" decoding="async" class="img-responsive" />
+        <img loading="lazy" src="{{ p.image or '/static/images/product-bg.svg' }}" alt="{{ p.title }}" onerror="this.src='/static/images/product-bg.svg'" decoding="async" class="img-responsive" />
         {% if p.is_latest %}
         <span class="badge-latest" aria-label="New product">🆕 NEW</span>
         {% endif %}
@@ -103,6 +104,9 @@
     </div>
     {% endfor %}
   </div>
+  {% else %}
+  <p style="text-align: center; color: #666; padding: 2rem;">No featured products at this time.</p>
+  {% endif %}
 </section>
 
 <section id="products" class="products">
@@ -113,9 +117,9 @@
       <div style="position: relative; overflow: hidden; border-radius: 8px 8px 0 0;">
         <img 
           loading="lazy" 
-          src="{{ p.image or settings.get_bg_url() }}" 
+          src="{{ p.image or '/static/images/product-bg.svg' }}" 
           alt="{{ p.title }}" 
-          onerror="this.src='{{ settings.get_bg_url() }}'" 
+          onerror="this.src='/static/images/product-bg.svg'" 
           decoding="async"
           class="img-responsive"
         />
