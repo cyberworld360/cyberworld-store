@@ -3,7 +3,11 @@
 <style>
   /* Homepage background styling */
   body {
-    background-image: url('{{ settings.get_bg_url() }}');
+    {% if settings and settings.get_bg_url() %}
+      background-image: url('{{ settings.get_bg_url() }}');
+    {% else %}
+      background-image: url('/static/images/product-bg.svg');
+    {% endif %}
     background-attachment: fixed;
     background-size: cover;
     background-position: center;
