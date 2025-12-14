@@ -1082,6 +1082,20 @@ class OrderLog(db.Model):
     note = db.Column(db.String(500))
     created_at = db.Column(db.DateTime, default=utc_now)
 
+    def __repr__(self):
+        return f"<OrderLog id={self.id} order_id={self.order_id} {self.old_status}→{self.new_status}>"
+
+    def to_display_dict(self):
+        return {
+            "id": self.id,
+            "order_id": self.order_id,
+            "changed_by": self.changed_by or "System",
+            "old_status": self.old_status or "N/A",
+            "new_status": self.new_status or "N/A",
+            "note": self.note or "",
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
 
 class Slider(db.Model):
     """Product sliders for homepage"""
@@ -1093,6 +1107,30 @@ class Slider(db.Model):
     display_order = db.Column(db.Integer, default=0)
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=utc_now)
+
+    def __repr__(self):
+        return f"<Slider id={self.id} name='{self.name}' products={len(self.products)}>"
+
+    def to_display_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "title": self.title,
+            "description": self.description or "",
+            "product_count": len(self.products) if self.products else 0,
+            "display_order": self.display_order,
+            "is_active": self.is_active,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "products": [
+                {
+                    "id": p.id,
+                    "title": p.title,
+                    "price": str(p.price_ghc) if p.price_ghc else "0.00",
+                    "image": p.image or "/static/images/placeholder.png"
+                }
+                for p in (self.products or [])
+            ]
+        }
 
 slider_product = db.Table('slider_product',
     db.Column('slider_id', db.Integer, db.ForeignKey('slider.id'), primary_key=True),
@@ -1201,6 +1239,26 @@ class FailedEmail(db.Model):
     attempts = db.Column(db.Integer, default=0)
     last_attempt_at = db.Column(db.DateTime, default=None)
     created_at = db.Column(db.DateTime, default=utc_now)
+
+    def __repr__(self):
+        return f"<FailedEmail id={self.id} to={self.to_address} attempts={self.attempts}>"
+
+    def increment_attempts(self):
+        """Increment failed attempt counter and update timestamp."""
+        self.attempts = (self.attempts or 0) + 1
+        self.last_attempt_at = utc_now()
+        return self.attempts
+
+    def to_display_dict(self):
+        return {
+            "id": self.id,
+            "to_address": self.to_address,
+            "subject": self.subject,
+            "attempts": self.attempts or 0,
+            "last_attempt_at": self.last_attempt_at.isoformat() if self.last_attempt_at else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "age_minutes": int((utc_now() - self.created_at).total_seconds() / 60) if self.created_at else 0,
+        }
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -1433,16 +1491,6 @@ def safe_int(value, default=0):
     except Exception as e:
         app.logger.debug(f"safe_int({value}) failed: {e}")
         return default
-
-
-def format_price(amount, currency='GH₵'):
-    """Format price for display"""
-    try:
-        d = safe_decimal(amount)
-        return f"{currency}{d:.2f}"
-    except Exception as e:
-        app.logger.error(f"format_price({amount}) failed: {e}")
-        return f"{currency}0.00"
 
 
 def validate_product_data(title, price_str):
