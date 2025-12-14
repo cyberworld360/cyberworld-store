@@ -736,10 +736,26 @@ class Product(db.Model):
         }
 
     def get_image_url(self):
-        """Get product image URL with fallback"""
-        if self.product_image_data:
-            return f'/image/product/{self.id}'
-        return self.image or ''
+        """Get product image URL with fallback.
+        Prefer product DB image endpoint when stored, otherwise use explicit
+        `image` field (absolute or relative), then fall back to Settings bg
+        URL or bundled placeholder. This keeps URL paths consistent with
+        the `/product/image/<id>` route and centralizes fallback logic.
+        """
+        try:
+            if self.product_image_data:
+                return f'/product/image/{self.id}'
+            if self.image:
+                return self.image
+            try:
+                s = get_settings()
+            except Exception:
+                s = None
+            if s:
+                return s.get_bg_url() or '/static/images/product-bg.svg'
+            return '/static/images/product-bg.svg'
+        except Exception:
+            return '/static/images/product-bg.svg'
 
     def to_display_dict(self, currency='GHS'):
         """Return UI-friendly product dict for templates"""
@@ -1146,7 +1162,7 @@ class Slider(db.Model):
                     "id": p.id,
                     "title": p.title,
                     "price": str(p.price_ghc) if p.price_ghc else "0.00",
-                    "image": p.image or "/static/images/placeholder.png"
+                    "image": (p.get_image_url() if hasattr(p, 'get_image_url') else (p.image or "/static/images/placeholder.png"))
                 }
                 for p in (self.products or [])
             ]
