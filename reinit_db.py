@@ -2,6 +2,8 @@
 """Hard reset of database - drop all tables and recreate from scratch"""
 import os
 import sys
+import base64
+from pathlib import Path
 from app import app, db, AdminUser, Product, Settings
 from decimal import Decimal
 
@@ -22,15 +24,37 @@ with app.app_context():
     db.session.commit()
     print("✓ Admin user created (username: admin, password: GITG360)")
     
-    # Create default Settings with image URLs
+    # Create default Settings with image URLs and embedded base64 image data
     settings = Settings()
     settings.bg_url = "/static/images/product-bg.svg"
     settings.banner1_url = "/static/images/ads1.svg"
     settings.banner2_url = "/static/images/ads2.svg"
     settings.logo_url = "/static/images/logo.svg"
+    
+    # Load and encode static images as base64 (for persistent storage on Vercel)
+    static_dir = Path(__file__).parent / 'static' / 'images'
+    images_to_load = [
+        ('logo.svg', 'logo_image_data', 'logo_image_mime'),
+        ('ads1.svg', 'banner1_image_data', 'banner1_image_mime'),
+        ('ads2.svg', 'banner2_image_data', 'banner2_image_mime'),
+        ('product-bg.svg', 'bg_image_data', 'bg_image_mime'),
+    ]
+    
+    for img_file, data_attr, mime_attr in images_to_load:
+        img_path = static_dir / img_file
+        if img_path.exists():
+            try:
+                raw_bytes = img_path.read_bytes()
+                encoded = base64.b64encode(raw_bytes)
+                setattr(settings, data_attr, encoded)
+                setattr(settings, mime_attr, 'image/svg+xml')
+                print(f"  ✓ Embedded {img_file} as base64")
+            except Exception as e:
+                print(f"  ⚠ Failed to embed {img_file}: {e}")
+    
     db.session.add(settings)
     db.session.commit()
-    print("✓ Settings configured with image URLs")
+    print("✓ Settings configured with image URLs and embedded base64 images")
     
     # Add comprehensive sample products
     sample = [
