@@ -94,6 +94,26 @@ def utc_now():
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "change-me")
 
+# Explicit static image routes to ensure images are served correctly in serverless
+# environments (some deployment layers may not expose the default Flask static route).
+from pathlib import Path as _Path
+_STATIC_IMG_DIR = _Path(__file__).parent / 'static' / 'images'
+
+@app.route('/static/images/<path:filename>')
+def _serve_static_image(filename):
+    try:
+        return send_from_directory(str(_STATIC_IMG_DIR), filename)
+    except Exception:
+        app.logger.exception('Failed to serve static image %s', filename)
+        abort(404)
+
+@app.route('/favicon.ico')
+def _favicon():
+    try:
+        return send_from_directory(str(_Path(__file__).parent / 'static'), 'favicon.ico')
+    except Exception:
+        abort(404)
+
 # Database configuration with persistence on Vercel
 _env_db = os.environ.get("SQLALCHEMY_DATABASE_URI", "").strip()
 _db_url = _env_db or os.environ.get("DATABASE_URL", "").strip()
@@ -1573,6 +1593,37 @@ def get_settings():
         try:
             db.session.add(settings)
             db.session.commit()
+            # If we've just created a fresh Settings row, try to seed
+            # base64-encoded image data from packaged static files so
+            # serverless deployments (Vercel) can serve images from DB.
+            try:
+                from pathlib import Path as _P
+                import base64 as _base64, mimetypes as _mimetypes
+                static_images_dir = _P(__file__).resolve().parent / 'static' / 'images'
+                def _maybe_load(src_name, data_attr, mime_attr, default_mime='image/svg+xml'):
+                    p = static_images_dir / src_name
+                    if p.exists():
+                        try:
+                            b = p.read_bytes()
+                            encoded = _base64.b64encode(b)
+                            setattr(settings, data_attr, encoded)
+                            setattr(settings, mime_attr, _mimetypes.guess_type(str(p))[0] or default_mime)
+                        except Exception:
+                            pass
+
+                _maybe_load('logo.svg', 'logo_image_data', 'logo_image_mime', 'image/svg+xml')
+                _maybe_load('ads1.svg', 'banner1_image_data', 'banner1_image_mime', 'image/svg+xml')
+                _maybe_load('ads2.svg', 'banner2_image_data', 'banner2_image_mime', 'image/svg+xml')
+                _maybe_load('product-bg.svg', 'bg_image_data', 'bg_image_mime', 'image/svg+xml')
+                try:
+                    db.session.commit()
+                except Exception:
+                    try:
+                        db.session.rollback()
+                    except Exception:
+                        pass
+            except Exception:
+                pass
         except Exception:
             # If commit fails (schema), swallow and return transient settings
             try:
