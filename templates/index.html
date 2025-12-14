@@ -141,35 +141,37 @@
 ;(function(){
   // Featured products horizontal track auto-scroll
   const track = document.querySelector('.featured-track');
+  if (!track) return; // Early exit if track element doesn't exist
+
   const prevBtn = document.querySelector('.featured-prev');
   const nextBtn = document.querySelector('.featured-next');
-  if (track) {
-    let timer = null;
-    const interval = 4000; // ms
-    const pageAmount = 0.9; // fraction of visible width to scroll
 
-    function step() {
-      const maxScroll = track.scrollWidth - track.clientWidth;
-      const next = Math.min(track.scrollLeft + Math.round(track.clientWidth * pageAmount), maxScroll);
-      track.scrollTo({ left: next, behavior: 'smooth' });
-      if (next >= maxScroll - 5) {
-        // loop back to start after a short delay
-        setTimeout(() => track.scrollTo({ left: 0, behavior: 'smooth' }), interval / 2);
-      }
+  let timer = null;
+  const interval = 4000; // ms
+  const pageAmount = 0.9; // fraction of visible width to scroll
+
+  function step() {
+    if (!track) return; // Safety check in case track is removed from DOM
+    const maxScroll = track.scrollWidth - track.clientWidth;
+    const next = Math.min(track.scrollLeft + Math.round(track.clientWidth * pageAmount), maxScroll);
+    track.scrollTo({ left: next, behavior: 'smooth' });
+    if (next >= maxScroll - 5) {
+      // loop back to start after a short delay
+      setTimeout(() => { if (track) track.scrollTo({ left: 0, behavior: 'smooth' }); }, interval / 2);
     }
-
-    function start() { if (!timer) timer = setInterval(step, interval); }
-    function stop() { if (timer) { clearInterval(timer); timer = null; } }
-
-    track.addEventListener('mouseenter', stop);
-    track.addEventListener('mouseleave', start);
-
-    if (prevBtn) prevBtn.addEventListener('click', (e) => { e.preventDefault(); stop(); track.scrollBy({ left: -Math.round(track.clientWidth * pageAmount), behavior: 'smooth' }); setTimeout(start, interval); });
-    if (nextBtn) nextBtn.addEventListener('click', (e) => { e.preventDefault(); stop(); track.scrollBy({ left: Math.round(track.clientWidth * pageAmount), behavior: 'smooth' }); setTimeout(start, interval); });
-
-    // start auto-scroll (only if overflow exists)
-    if (track.scrollWidth > track.clientWidth) start();
   }
+
+  function start() { if (!timer) timer = setInterval(step, interval); }
+  function stop() { if (timer) { clearInterval(timer); timer = null; } }
+
+  track.addEventListener('mouseenter', stop);
+  track.addEventListener('mouseleave', start);
+
+  if (prevBtn) prevBtn.addEventListener('click', (e) => { e.preventDefault(); stop(); if (track) track.scrollBy({ left: -Math.round(track.clientWidth * pageAmount), behavior: 'smooth' }); setTimeout(start, interval); });
+  if (nextBtn) nextBtn.addEventListener('click', (e) => { e.preventDefault(); stop(); if (track) track.scrollBy({ left: Math.round(track.clientWidth * pageAmount), behavior: 'smooth' }); setTimeout(start, interval); });
+
+  // start auto-scroll (only if overflow exists)
+  if (track.scrollWidth > track.clientWidth) start();
 
   // Ads slider auto-rotate (fades slides by toggling .active)
   const slides = document.querySelectorAll('.ads-slider .slide');

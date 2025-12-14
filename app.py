@@ -2099,7 +2099,26 @@ def index():
     for p in prods:
         p.is_latest = p.created_at >= cutoff_date if p.created_at else False
     
-    return render_template("index.html", products=prods, featured=featured)
+    # Retrieve settings with fallback
+    try:
+        settings = Settings.query.first()
+        if not settings:
+            # Create default settings if none exist
+            settings = Settings()
+            db.session.add(settings)
+            db.session.commit()
+    except Exception:
+        app.logger.exception('Failed to retrieve settings; using defaults')
+        # Create a mock settings object with default values
+        from types import SimpleNamespace
+        settings = SimpleNamespace(
+            get_bg_url=lambda: '/static/images/product-bg.svg',
+            get_banner1_url=lambda: '/static/images/ads1.svg',
+            get_banner2_url=lambda: '/static/images/ads2.svg',
+            get_logo_url=lambda: '/static/images/logo.svg'
+        )
+    
+    return render_template("index.html", products=prods, featured=featured, settings=settings)
 
 @app.route("/product/<int:pid>")
 def product_detail(pid):
