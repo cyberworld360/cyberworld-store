@@ -150,6 +150,11 @@
         font-weight: bold;
         cursor: pointer;
         transition: all 0.3s ease;
+        text-decoration: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 44px;
     }
     .btn-primary {
         background: #27ae60;
@@ -212,6 +217,7 @@
         border: 1px solid #ddd;
         border-radius: 4px;
         font-size: 14px;
+        min-width: 0;
     }
     .coupon-input-group button {
         padding: 10px 20px;
@@ -221,6 +227,7 @@
         border-radius: 4px;
         cursor: pointer;
         font-weight: bold;
+        white-space: nowrap;
     }
     .coupon-input-group button:hover {
         background: #229954;
@@ -253,6 +260,52 @@
     }
     .coupon-info.show {
         display: block;
+    }
+    
+    /* Mobile responsive */
+    @media (max-width: 768px) {
+        .checkout-container {
+            margin: 20px 10px;
+            padding: 20px;
+        }
+        
+        .checkout-container h2 {
+            font-size: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .btn-container {
+            grid-template-columns: 1fr;
+            gap: 10px;
+        }
+        
+        .coupon-input-group {
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .coupon-input-group button {
+            width: 100%;
+        }
+        
+        .form-section,
+        .payment-methods,
+        .coupon-section,
+        .order-summary {
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .form-section h3,
+        .payment-methods h3,
+        .coupon-section h3,
+        .order-summary h3 {
+            font-size: 14px;
+        }
+        
+        .order-item {
+            font-size: 14px;
+        }
     }
 </style>
 
@@ -462,34 +515,47 @@
     // Coupon validation
     function validateCoupon() {
         const code = document.getElementById('coupon-code').value.trim();
-            const subtotal = parseFloat('{{ total }}');
+        const subtotal = parseFloat('{{ total }}');
         
         if (!code) {
             showCouponMessage('Please enter a coupon code.', 'error');
             return;
         }
 
+        // Disable button while processing
+        const btn = event.target;
+        btn.disabled = true;
+        btn.textContent = 'Validating...';
+
         fetch('/api/validate-coupon', {
             method: 'POST',
             headers: {'Content-Type': 'application/x-www-form-urlencoded'},
             body: 'code=' + encodeURIComponent(code) + '&total=' + subtotal
         })
-        .then(r => r.json())
+        .then(r => {
+            if (!r.ok) throw new Error('Server error: ' + r.status);
+            return r.json();
+        })
         .then(data => {
             if (data.valid) {
-                showCouponMessage(data.message, 'success');
+                showCouponMessage('✓ ' + data.message, 'success');
                 updateOrderTotal(data.discount, data.final_total, data.coupon_id);
                 document.getElementById('coupon-info').classList.add('show');
                 document.getElementById('coupon-info').innerHTML = 
                     `<strong>✓ Coupon Applied!</strong><br>Discount: ${data.discount_type === 'percent' ? data.discount_value + '%' : 'GH₵' + data.discount_value.toFixed(2)}<br>You saved: GH₵${data.discount.toFixed(2)}`;
             } else {
-                showCouponMessage(data.message, 'error');
+                showCouponMessage('❌ ' + data.message, 'error');
                 document.getElementById('coupon-info').classList.remove('show');
                 resetOrderTotal();
             }
         })
         .catch(e => {
-            showCouponMessage('Error validating coupon: ' + e, 'error');
+            showCouponMessage('❌ Error: ' + (e.message || 'Could not validate coupon'), 'error');
+            resetOrderTotal();
+        })
+        .finally(() => {
+            btn.disabled = false;
+            btn.textContent = 'Apply';
         });
     }
 
@@ -515,6 +581,7 @@
     // Allow Enter key to apply coupon
     document.getElementById('coupon-code').addEventListener('keypress', function(e) {
         if (e.key === 'Enter') {
+            e.preventDefault();
             validateCoupon();
         }
     });

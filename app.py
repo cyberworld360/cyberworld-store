@@ -758,7 +758,8 @@ class Product(db.Model):
             return '/static/images/product-bg.svg'
 
     def to_display_dict(self, currency='GHS'):
-        """Return UI-friendly product dict for templates"""
+        """Return UI-friendly product dict for templates with styling info"""
+        styling = get_styling_info()
         return {
             "id": self.id,
             "title": self.title,
@@ -769,6 +770,7 @@ class Product(db.Model):
             "featured": bool(self.featured),
             "card_size": self.card_size,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+            "styling": styling,
         }
 
 class AdminUser(UserMixin, db.Model):
@@ -901,11 +903,13 @@ class Wallet(db.Model):
             return Decimal('0')
 
     def to_display_dict(self):
+        styling = get_styling_info()
         return {
             "id": self.id,
             "user_id": self.user_id,
             "balance": format_price(self.get_balance(), 'GHS'),
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "styling": styling,
         }
 
 
@@ -969,6 +973,7 @@ class Order(db.Model):
         }
 
     def to_display_dict(self, currency='GHS'):
+        styling = get_styling_info()
         return {
             "id": self.id,
             "reference": self.reference,
@@ -979,6 +984,7 @@ class Order(db.Model):
             "payment_method": self.payment_method,
             "paid": bool(self.paid),
             "created_at": self.created_at.isoformat() if self.created_at else None,
+            "styling": styling,
         }
 
 
@@ -1017,6 +1023,7 @@ class OrderItem(db.Model):
             return Decimal('0')
 
     def to_display_dict(self, currency='GHS'):
+        styling = get_styling_info()
         return {
             "id": self.id,
             "order_id": self.order_id,
@@ -1025,6 +1032,7 @@ class OrderItem(db.Model):
             "qty": int(self.qty),
             "price": format_price(self.price or 0, currency),
             "subtotal": format_price(self.get_subtotal(), currency),
+            "styling": styling,
         }
 
 
@@ -1096,6 +1104,7 @@ class Coupon(db.Model):
 
     def to_display_dict(self):
         valid, msg = self.is_valid()
+        styling = get_styling_info()
         return {
             "id": self.id,
             "code": self.code,
@@ -1105,6 +1114,7 @@ class Coupon(db.Model):
             "valid": valid,
             "valid_message": msg,
             "expiry_date": self.expiry_date.isoformat() if self.expiry_date else None,
+            "styling": styling,
         }
 
 
@@ -1148,6 +1158,7 @@ class Slider(db.Model):
         return f"<Slider id={self.id} name='{self.name}' products={len(self.products)}>"
 
     def to_display_dict(self):
+        styling = get_styling_info()
         return {
             "id": self.id,
             "name": self.name,
@@ -1165,7 +1176,8 @@ class Slider(db.Model):
                     "image": (p.get_image_url() if hasattr(p, 'get_image_url') else (p.image or "/static/images/placeholder.png"))
                 }
                 for p in (self.products or [])
-            ]
+            ],
+            "styling": styling,
         }
 
 slider_product = db.Table('slider_product',
@@ -1390,6 +1402,31 @@ def short_description(text, length=140):
     return truncated + '…'
 
 
+def get_styling_info():
+    """Get current Settings styling info for JSON API responses.
+    Returns dict with primary_color, primary_font, secondary_color, dashboard_layout, cart_on_right.
+    Safe fallback if Settings unavailable."""
+    try:
+        s = get_settings()
+        if s:
+            return {
+                "primary_color": s.primary_color or '#27ae60',
+                "secondary_color": s.secondary_color or '#2c3e50',
+                "primary_font": s.primary_font or 'Arial, sans-serif',
+                "dashboard_layout": s.dashboard_layout or 'grid',
+                "cart_on_right": bool(s.cart_on_right),
+            }
+    except Exception:
+        pass
+    return {
+        "primary_color": '#27ae60',
+        "secondary_color": '#2c3e50',
+        "primary_font": 'Arial, sans-serif',
+        "dashboard_layout": 'grid',
+        "cart_on_right": False,
+    }
+
+
 def _safe_db_rollback_and_close():
         """Safely rollback and close the DB session to clear transaction state.
 
@@ -1556,55 +1593,111 @@ def validate_order_total(cart_items):
         return None, str(e)
 
 
-def is_valid_email(email):
-    """Basic email validation"""
-    if not email or not isinstance(email, str):
-        return False
-    email = email.strip()
-    return '@' in email and '.' in email.split('@')[-1]
+# ========== SETTINGS CACHE SYSTEM FOR REAL-TIME SYNC ==========
+# Global cache for settings to enable instant UI updates without page reloads
+class SettingsCache:
+    """In-memory cache for settings with thread-safe access and invalidation.
+    
+    This cache ensures that when admin changes settings, all connected browsers
+    can fetch the latest settings without waiting for page reloads.
+    """
+    def __init__(self):
+        self._cache = None
+        self._cache_time = None
+        self._cache_ttl = 60  # 60 seconds TTL
+        self._lock = __import__('threading').Lock()
+    
+    def get(self, force_fresh=False):
+        """Get settings from cache or database.
+        
+        Args:
+            force_fresh: If True, bypass cache and fetch from database
+        
+        Returns:
+            Settings object (from cache or database)
+        """
+        if force_fresh:
+            return self._fetch_from_db()
+        
+        with self._lock:
+            if self._cache is not None and self._cache_time is not None:
+                # Check if cache is still valid (not expired)
+                if time.time() - self._cache_time < self._cache_ttl:
+                    return self._cache
+        
+        # Cache expired or empty, fetch fresh
+        return self._fetch_from_db()
+    
+    def _fetch_from_db(self):
+        """Fetch settings directly from database and update cache."""
+        try:
+            # Use the active session to ensure the instance is bound to it
+            settings = db.session.query(Settings).first()
+            if settings:
+                # Ensure the returned instance is bound to the current session
+                try:
+                    from sqlalchemy.orm import object_session
+                    if object_session(settings) is None:
+                        settings = db.session.merge(settings)
+                except Exception:
+                    # If SQLAlchemy isn't available or merge fails, return raw settings
+                    pass
+                with self._lock:
+                    self._cache = settings
+                    self._cache_time = time.time()
+                return settings
+        except Exception as e:
+            try:
+                app.logger.warning("SettingsCache: Failed to fetch from DB: %s", e)
+            except Exception:
+                pass
+        
+        # Fallback to stale cache if available
+        with self._lock:
+            if self._cache is not None:
+                return self._cache
+        
+        # Final fallback: return empty Settings object
+        return Settings()
+    
+    def invalidate(self):
+        """Invalidate cache when settings are changed (call after updating Settings)."""
+        with self._lock:
+            self._cache = None
+            self._cache_time = None
+    
+    def set_ttl(self, seconds):
+        """Set cache time-to-live in seconds."""
+        self._cache_ttl = max(1, seconds)
 
+# Global settings cache instance
+_settings_cache = SettingsCache()
 
-def get_settings():
-    """Get site settings, create defaults if not exist"""
+def get_settings(force_fresh=False):
+    """Get site settings, using cache for performance but allowing force refresh.
+    
+    Args:
+        force_fresh: If True, fetch directly from database, bypassing cache
+    
+    Returns:
+        Settings object with current configuration
+    """
     try:
-        # Ensure DB has required settings columns before reading (helps older schemas)
-        try:
-            _ensure_settings_columns()
-        except Exception:
-            pass
-        settings = Settings.query.first()
+        # Use cache with optional force refresh
+        return _settings_cache.get(force_fresh=force_fresh)
     except Exception as e:
-        # Database schema may be older (missing new Settings columns). Return
-        # a transient Settings object with defaults so templates and login
-        # pages can render without failing. This avoids forcing migrations
-        # at runtime; admin can run `flask db upgrade` or `python -m` init scripts.
         try:
-            app.logger.warning("Could not query Settings (db schema mismatch): %s", e)
+            app.logger.warning("get_settings failed: %s", e)
         except Exception:
             pass
-        # Attempt to rollback any failed session state, then persist last traceback
         try:
             _safe_db_rollback_and_close()
         except Exception:
             pass
-        # Persist last traceback for easier debugging in serverless/production
-        try:
-            import traceback
-            tb = traceback.format_exc()
-            last_err_path = str(Path(tempfile.gettempdir()) / 'last_error.txt')
-            with open(last_err_path, 'w', encoding='utf-8') as fh:
-                fh.write(f"Time: {utc_now().isoformat()}\n")
-                fh.write(str(e) + '\n\n')
-                fh.write(tb)
-        except Exception:
-            # If we can't persist to /tmp, do not crash the app
-            try:
-                app.logger.exception('Failed to write last_error file')
-            except Exception:
-                pass
         return Settings()
 
-    if not settings:
+    # Legacy code path (kept for backwards compatibility, should not be reached now):
+    if False and not settings:
         settings = Settings()
         try:
             db.session.add(settings)
@@ -2167,20 +2260,20 @@ def _ensure_product_created_at_column():
     rendering won't crash when migrations haven't been applied yet.
     """
     try:
-        engine = db.get_engine(app)
+        engine = db.get_engine(None)  # or provide the appropriate bind_key if needed
         dialect = engine.dialect.name
         if dialect == 'sqlite':
             # Use sqlite PRAGMA to inspect columns
             with engine.connect() as conn:
-                res = conn.execute("PRAGMA table_info('product');")
+                res = conn.exec_driver_sql("PRAGMA table_info('product');")
                 cols = [r[1] for r in res.fetchall()]
                 if 'created_at' not in cols:
                     app.logger.info('Adding missing product.created_at column (sqlite)')
                     try:
-                        conn.execute("ALTER TABLE product ADD COLUMN created_at DATETIME DEFAULT (CURRENT_TIMESTAMP);")
+                        conn.exec_driver_sql("ALTER TABLE product ADD COLUMN created_at DATETIME DEFAULT (CURRENT_TIMESTAMP);")
                     except Exception:
-                        # If table doesn't exist, create_all as fallback
-                        app.logger.info('product table missing; running create_all()')
+                        # If table doesn't exist or ALTER fails, run create_all() as a fallback
+                        app.logger.info('product table missing or ALTER failed; running create_all()')
                         with app.app_context():
                             db.create_all()
     except Exception as e:
@@ -4332,6 +4425,8 @@ def admin_settings():
             pass
         try:
             db.session.commit()
+            # Invalidate settings cache so all clients fetch fresh settings
+            _settings_cache.invalidate()
             flash('Settings saved successfully!', 'success')
         except Exception as e_local:
             try:
@@ -4479,6 +4574,8 @@ def admin_settings_api():
                 pass
             return jsonify({'status': 'error', 'message': str(e)}), 500
         db.session.commit()
+        # Invalidate settings cache so all clients fetch fresh settings
+        _settings_cache.invalidate()
 
         return jsonify({
             'status': 'success',
@@ -4497,6 +4594,61 @@ def admin_settings_api():
             pass
         try:
             app.logger.exception('Failed to save settings via API: %s', e)
+        except Exception:
+            pass
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/api/settings/live', methods=['GET'])
+def api_settings_live():
+    """Real-time settings endpoint for instant client-side updates.
+    
+    This endpoint always fetches the latest settings from the database,
+    bypassing cache. Used by client-side JavaScript to poll for changes.
+    Clients poll this endpoint regularly to detect when admin changes settings.
+    
+    Returns:
+        JSON with current settings and a hash for change detection
+    """
+    try:
+        # Force fresh fetch from database (bypass cache)
+        settings = get_settings(force_fresh=True)
+        
+        if not settings:
+            return jsonify({'status': 'error', 'message': 'Settings not found'}), 404
+        
+        # Build response with all settings that affect UI
+        settings_data = {
+            'id': settings.id,
+            'primary_color': settings.primary_color,
+            'secondary_color': settings.secondary_color,
+            'primary_font': settings.primary_font,
+            'secondary_font': settings.secondary_font,
+            'logo_height': settings.logo_height,
+            'logo_top_px': settings.logo_top_px,
+            'logo_zindex': settings.logo_zindex,
+            'cart_on_right': settings.cart_on_right,
+            'custom_css': settings.custom_css or '',
+            'dashboard_layout': settings.dashboard_layout,
+            'site_announcement': settings.site_announcement or '',
+            'seo_visible': settings.seo_visible,
+            'updated_at': settings.updated_at.isoformat() if settings.updated_at else None,
+        }
+        
+        # Generate a hash of settings to detect changes
+        import hashlib
+        import json as _json_lib
+        settings_hash = hashlib.md5(
+            _json_lib.dumps(settings_data, sort_keys=True, default=str).encode()
+        ).hexdigest()
+        
+        return jsonify({
+            'status': 'success',
+            'settings': settings_data,
+            'hash': settings_hash
+        }), 200
+    except Exception as e:
+        try:
+            app.logger.exception('Failed to fetch live settings: %s', e)
         except Exception:
             pass
         return jsonify({'status': 'error', 'message': str(e)}), 500
@@ -4876,6 +5028,36 @@ def product_image(pid):
     except Exception as e:
         app.logger.warning('Error serving product image %s: %s', pid, e)
         abort(404)
+
+
+@app.route('/favicon.ico')
+def favicon():
+    """Serve favicon — use logo as favicon or static fallback."""
+    try:
+        # Try to serve compressed logo from settings
+        settings = get_settings()
+        if settings and settings.logo_image_data:
+            import base64
+            try:
+                if isinstance(settings.logo_image_data, (bytes, bytearray)):
+                    decoded = base64.b64decode(settings.logo_image_data)
+                else:
+                    decoded = base64.b64decode(settings.logo_image_data.encode('utf-8'))
+                mime = settings.logo_image_mime or 'image/x-icon'
+                return app.response_class(response=decoded, status=200, mimetype=mime)
+            except Exception:
+                pass
+        
+        # Fallback: try to serve static favicon if exists
+        favicon_path = os.path.join(app.static_folder, 'favicon.ico')
+        if os.path.exists(favicon_path):
+            return send_from_directory(app.static_folder, 'favicon.ico')
+        
+        # Ultimate fallback: 204 No Content (acceptable for favicon)
+        return '', 204
+    except Exception as e:
+        app.logger.warning('Error serving favicon: %s', e)
+        return '', 204
 
 
 # Error handler

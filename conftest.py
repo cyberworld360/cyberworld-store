@@ -2,6 +2,21 @@ import os
 import pytest
 from pathlib import Path
 
+# Ensure test env vars are present at import time so importing `app` during
+# pytest collection picks up the local SQLite configuration instead of trying
+# to open a production DB. Fixtures still run as before.
+os.environ.setdefault('DATABASE_URL', 'sqlite:///./data.db')
+os.environ.setdefault('FORCE_EPHEMERAL', '1')
+os.environ.setdefault('MAIL_SERVER', '')
+os.environ.setdefault('MAIL_USERNAME', '')
+os.environ.setdefault('MAIL_PASSWORD', '')
+os.environ.setdefault('REDIS_URL', '')
+os.environ.setdefault('PAYSTACK_PUBLIC', 'test_public')
+os.environ.setdefault('PAYSTACK_SECRET', 'test_secret')
+os.environ.setdefault('SENDGRID_API_KEY', '')
+os.environ.setdefault('FLASK_ENV', 'testing')
+os.environ.setdefault('FLASK_DEBUG', '0')
+
 @pytest.fixture(autouse=True)
 def set_test_env(monkeypatch):
     """Set environment for tests to avoid external calls and enforce local SQLite.

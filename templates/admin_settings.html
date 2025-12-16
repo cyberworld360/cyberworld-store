@@ -522,5 +522,101 @@
             preview.setAttribute('data-font', input.value);
         });
     });
+
+    // ===== REAL-TIME AUTO-SAVE FUNCTIONALITY =====
+    // Auto-save settings via AJAX as soon as user changes any simple field
+    // This allows instant preview without waiting for form submission
+    
+    let autoSaveTimeout = null;
+    const fieldsToAutoSave = [
+        'primary_color',
+        'secondary_color',
+        'primary_font',
+        'secondary_font',
+        'custom_css',
+        'logo_height',
+        'logo_top_px',
+        'logo_zindex',
+        'cart_on_right',
+        'dashboard_layout',
+        'seo_visible',
+        'site_announcement'
+    ];
+    
+    function autoSaveField(fieldId) {
+        // Clear any pending auto-save timeout
+        if (autoSaveTimeout) {
+            clearTimeout(autoSaveTimeout);
+        }
+        
+        // Debounce auto-save (wait 1 second after user stops typing)
+        autoSaveTimeout = setTimeout(() => {
+            const element = document.getElementById(fieldId);
+            if (!element) return;
+            
+            let value = element.value;
+            
+            // Handle checkboxes
+            if (element.type === 'checkbox') {
+                value = element.checked;
+            }
+            
+            // Build payload
+            const payload = {};
+            payload[fieldId] = value;
+            
+            // Send AJAX request
+            fetch('/admin/settings/api', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload)
+            })
+            .then(response => {
+                if (response.ok) {
+                    // Settings saved successfully, settings-sync.js will auto-apply changes
+                    console.log('[AdminSettings] Auto-saved: ' + fieldId);
+                } else {
+                    console.warn('[AdminSettings] Auto-save failed for ' + fieldId);
+                }
+                return response.json();
+            })
+            .catch(error => {
+                console.error('[AdminSettings] Auto-save error:', error);
+            });
+        }, 1000);  // Wait 1 second after user stops typing
+    }
+    
+    // Attach auto-save listeners to all auto-saveable fields
+    fieldsToAutoSave.forEach(fieldId => {
+        const element = document.getElementById(fieldId);
+        if (!element) return;
+        
+        if (element.type === 'checkbox') {
+            element.addEventListener('change', () => autoSaveField(fieldId));
+        } else {
+            element.addEventListener('input', () => autoSaveField(fieldId));
+            element.addEventListener('change', () => autoSaveField(fieldId));
+        }
+    });
+    
+    // Also track color picker changes
+    document.querySelectorAll('input[type="color"]').forEach(colorInput => {
+        colorInput.addEventListener('input', (e) => {
+            // Update the hex display and trigger auto-save
+            const hexDisplay = e.target.nextElementSibling?.nextElementSibling;
+            if (hexDisplay && hexDisplay.classList.contains('color-hex')) {
+                hexDisplay.value = e.target.value;
+            }
+            autoSaveField(e.target.id);
+        });
+    });
+    
+    // Listen for settings changes from other browser tabs/windows
+    document.addEventListener('settingsUpdated', (e) => {
+        console.log('[AdminSettings] Settings updated from another source:', e.detail);
+        // Could add visual notification here
+    });
 </script>
 {% endblock %}
