@@ -141,9 +141,18 @@ def main(argv=None):
     # Determine vercel executable for this platform
     vercel_exe = 'vercel.cmd' if platform.system() == 'Windows' else 'vercel'
 
+    # Allow non-interactive deployments when a VERCEL_TOKEN is provided
+    vercel_token_env = os.environ.get('VERCEL_TOKEN') or os.environ.get('VERCEL_TOKEN'.upper())
+    skip_login = False
+    if vercel_token_env or args.non_interactive:
+        skip_login = True
+
     print("\n🔐 Vercel authentication...")
-    print("Please login to Vercel (if not already logged in):")
-    run_command([vercel_exe, 'login'], "Login to Vercel")
+    if skip_login:
+        print("Non-interactive mode enabled or VERCEL_TOKEN detected; skipping interactive login.")
+    else:
+        print("Please login to Vercel (if not already logged in):")
+        run_command([vercel_exe, 'login'], "Login to Vercel")
     
     # Step 8: Deploy
     print("\n🚀 Deploying to Vercel...")
