@@ -114,8 +114,12 @@ def main(argv=None):
     # Step 3: Check Python and dependencies
     print("\n🐍 Checking Python environment...")
     run_command(".venv\\Scripts\\python.exe --version", "Check Python version")
-    if not args.dry_run:
+    # Allow skipping pip install in CI or when requested to avoid long hangs
+    skip_pip = os.environ.get('SKIP_PIP_INSTALL') == '1'
+    if not args.dry_run and not skip_pip:
         run_command(".venv\\Scripts\\pip.exe install -r requirements.txt", "Install Python dependencies")
+    elif skip_pip:
+        print("🔧 SKIP_PIP_INSTALL=1 detected — skipping Python dependency installation")
     
     # Step 4: Test Flask app syntax
     print("\n🧪 Testing Flask app...")
