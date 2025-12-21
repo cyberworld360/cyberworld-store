@@ -40,3 +40,10 @@ Thumbs.db
 *.cache
 .pytest_cache/
 .vercel
+.env
+.env.local
+.env.*.local
+.env
+.env.local
+.env.*.local
+*.key
